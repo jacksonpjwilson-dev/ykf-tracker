@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024">
+<defs><radialGradient id="bg" cx="50%" cy="58%" r="75%"><stop offset="0" stop-color="#123a5c"/><stop offset="1" stop-color="#07131f"/></radialGradient>
+<linearGradient id="sw" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#3be3a0" stop-opacity="0"/><stop offset="1" stop-color="#3be3a0" stop-opacity=".45"/></linearGradient></defs>
+<rect width="1024" height="1024" fill="url(#bg)"/>
+<g fill="none" stroke="#3be3a0" stroke-opacity=".35" stroke-width="10"><circle cx="512" cy="580" r="130"/><circle cx="512" cy="580" r="260"/></g>
+<circle cx="512" cy="580" r="390" fill="none" stroke="#ffb547" stroke-width="14" stroke-dasharray="40 26"/>
+<path d="M512 580 L512 190 A390 390 0 0 1 836 363 Z" fill="url(#sw)"/>
+<g transform="translate(512 580) rotate(-35)"><rect x="-22" y="-95" width="44" height="190" rx="8" fill="#e8f1f8"/><g stroke="#123a5c" stroke-width="6"><line x1="0" y1="-75" x2="0" y2="-45"/><line x1="0" y1="-15" x2="0" y2="15"/><line x1="0" y1="45" x2="0" y2="75"/></g></g>
+<g transform="translate(735 300) rotate(-135) scale(2.3)" fill="#ffffff"><path d="M0-48c4 0 6 4 6 9v24l38 20v9l-38-11v22l11 9v7l-17-5-17 5v-7l11-9v-22l-38 11v-9l38-20v-24c0-5 2-9 6-9z"/></g>
+<text x="512" y="150" text-anchor="middle" font-family="DejaVu Sans, Arial, sans-serif" font-weight="700" font-size="120" fill="#ffffff" letter-spacing="14">YKF</text>
+</svg>
