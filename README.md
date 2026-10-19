@@ -59,7 +59,7 @@ cd docs && python3 -m http.server 18791            # view the page locally
 The rows carry only tail, type, ETA, distance, altitude, last seen, status and an "unscheduled" note. There are no owner or operator names, no hex codes, no links and no client info. `page_show_operator` is false.
 
 ## GitHub (live)
-- **Page:** GitHub Pages from `main:/docs`. It fetches `https://raw.githubusercontent.com/jacksonpjwilson-dev/ykf-tracker/data/live.json?t=<now>` every 15 s.
+- **Page:** GitHub Pages from `main:/docs`. It reads `live.json` from the `data` branch through the GitHub contents API every 60 s; ETag revalidations are free. If that fails, it falls back to raw.githubusercontent.com, which caches a branch for up to 5 min.
 - **Data:** inside a shift window, `live.json` is force-pushed about every 2 min (and right away on an alert) as the only commit on the `data` branch. Outside windows it's pushed once, with `active:false` and `next_window`, and the page then says "Not on shift — next window …".
 - **Alerts:** each poll that produces alerts writes the pending files first, then opens ONE issue for the batch. The title is the alert text, the label is `alert`, it's assigned to jacksonpjwilson-dev, and the body has public fields only. The issue number is added to the pending files. A failure is logged and doesn't stop the tracker. Tower closes the issue after delivering.
 - **Test issue:** `python3 -m ykf.run test-issue --dry-run` previews it; drop `--dry-run` to create it.
