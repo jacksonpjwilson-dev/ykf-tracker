@@ -41,8 +41,11 @@ footer{color:var(--mut);font-size:11px;margin-top:18px;text-align:center}
 <div class="meta" id="meta">Loading…</div>
 <main id="list"></main>
 <footer>Arrivals within <span id="r">10</span> NM of CYKF. Positions from community ADS-B feeds; may lag or miss aircraft. Refreshes every minute.</footer>
+<script src="config.js?v=2"></script><script src="jwauth.js?v=2"></script><script src="private-gate.js?v=2"></script>
+<style>.jwg{--jwg-bg:var(--bg);--jwg-fg:var(--fg);--jwg-mut:var(--mut);--jwg-card:var(--card);--jwg-line:var(--line);--jwg-accent:var(--blue)}</style>
 <script>
 const $=s=>document.querySelector(s);
+const PRIVATE=!!((window.YKF_CFG||{}).PRIVATE||/[?&]private=1\b/.test(location.search));
 const fmtTime=s=>{if(!s)return"—";const d=new Date(s);return d.toLocaleTimeString("en-CA",{hour:"2-digit",minute:"2-digit",hour12:false,timeZone:"America/Toronto"})};
 const ago=s=>{if(!s)return"";const x=Math.round((Date.now()-new Date(s))/1000);return x<60?x+" s ago":Math.round(x/60)+" min ago"};
 const esc=s=>String(s??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
@@ -54,6 +57,7 @@ const ONLINE=location.hostname.endsWith("github.io");
 const API="https://api.github.com/repos/jacksonpjwilson-dev/ykf-tracker/contents/live.json?ref=data";
 const RAW="https://raw.githubusercontent.com/jacksonpjwilson-dev/ykf-tracker/data/live.json";
 async function getData(){
+  if(PRIVATE){const d=await JWAUTH.getDoc('ykf/live');if(!d||!d.data)throw new Error('no data yet');return d.data} // private: Firestore ykf/live, written by the box
   if(!ONLINE){const r=await fetch("data/live.json?t="+Date.now(),{cache:"no-store"});return r.json()}
   try{
     const r=await fetch(API);if(!r.ok)throw new Error("api "+r.status);
@@ -85,7 +89,8 @@ async function load(){
       <span>Last seen <b>${x.last_seen?fmtTime(x.last_seen):"—"}</b> ${esc(ago(x.last_seen))}</span></div></div>`).join("");
   }catch(e){$("#meta").textContent="Couldn't load data ("+e.message+")"}
 }
-load();setInterval(load,ONLINE?60000:15000);
+function startApp(){load();setInterval(load,ONLINE?60000:15000)}
+if(PRIVATE)PrivateGate.open({title:'YKF Arrivals',icon:'apple-touch-icon.png',ownerUid:(window.YKF_CFG||{}).OWNER_UID,probe:'ykf/live'}).then(startApp);else startApp();
 </script>
 </body>
 </html>
