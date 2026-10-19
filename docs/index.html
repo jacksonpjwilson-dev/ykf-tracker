@@ -34,20 +34,31 @@ footer{color:var(--mut);font-size:11px;margin-top:18px;text-align:center}
 <header><h1>YKF Arrivals</h1><span id="state" class="pill off">…</span></header>
 <div class="meta" id="meta">Loading…</div>
 <main id="list"></main>
-<footer>Arrivals within <span id="r">10</span> NM of CYKF. Positions from community ADS-B feeds; may lag or miss aircraft. Refreshes every 15 s.</footer>
+<footer>Arrivals within <span id="r">10</span> NM of CYKF. Positions from community ADS-B feeds; may lag or miss aircraft. Refreshes every minute.</footer>
 <script>
 const $=s=>document.querySelector(s);
 const fmtTime=s=>{if(!s)return"—";const d=new Date(s);return d.toLocaleTimeString("en-CA",{hour:"2-digit",minute:"2-digit",hour12:false,timeZone:"America/Toronto"})};
 const ago=s=>{if(!s)return"";const x=Math.round((Date.now()-new Date(s))/1000);return x<60?x+" s ago":Math.round(x/60)+" min ago"};
 const esc=s=>String(s??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 const cls={"inside 10 NM":"inside","tracking":"tracking","expected":"expected","on ground":"ground","landed?":"ground"};
-const DATA=location.hostname.endsWith("github.io")
-  ?"https://raw.githubusercontent.com/jacksonpjwilson-dev/ykf-tracker/data/live.json"
-  :"data/live.json";
+// On GitHub Pages: read live.json from the 'data' branch through the GitHub contents API
+// (fresh within 60 s; ETag revalidations don't count against the 60/h anonymous limit).
+// raw.githubusercontent.com caches a branch ref for up to 5 min whatever the query string, so it is only the fallback.
+const ONLINE=location.hostname.endsWith("github.io");
+const API="https://api.github.com/repos/jacksonpjwilson-dev/ykf-tracker/contents/live.json?ref=data";
+const RAW="https://raw.githubusercontent.com/jacksonpjwilson-dev/ykf-tracker/data/live.json";
+async function getData(){
+  if(!ONLINE){const r=await fetch("data/live.json?t="+Date.now(),{cache:"no-store"});return r.json()}
+  try{
+    const r=await fetch(API);if(!r.ok)throw new Error("api "+r.status);
+    const j=await r.json();const bin=atob(j.content.replace(/\n/g,""));
+    return JSON.parse(new TextDecoder().decode(Uint8Array.from(bin,c=>c.charCodeAt(0))));
+  }catch(e){const r=await fetch(RAW+"?t="+Date.now(),{cache:"no-store"});return r.json()}
+}
 const dayTime=s=>{const d=new Date(s);return d.toLocaleDateString("en-CA",{weekday:"short",month:"short",day:"numeric",timeZone:"America/Toronto"}).replace(",","")+" "+fmtTime(s)};
 async function load(){
   try{
-    const r=await fetch(DATA+"?t="+Date.now(),{cache:"no-store"});const d=await r.json();
+    const d=await getData();
     $("#r").textContent=d.radius_nm;
     const st=$("#state");st.textContent=d.active?"On shift":"Off shift";st.className="pill "+(d.active?"on":"off");
     const age=(Date.now()-new Date(d.generated))/1000;
@@ -68,7 +79,7 @@ async function load(){
       <span>Last seen <b>${x.last_seen?fmtTime(x.last_seen):"—"}</b> ${esc(ago(x.last_seen))}</span></div></div>`).join("");
   }catch(e){$("#meta").textContent="Couldn't load data ("+e.message+")"}
 }
-load();setInterval(load,15000);
+load();setInterval(load,ONLINE?60000:15000);
 </script>
 </body>
 </html>
