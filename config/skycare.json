@@ -257,5 +257,12 @@
    "source": "live ADS-B 2026-10-19 (adsb.fi), callsign PHX58; not in the CCAR owner search for 2080061 Ontario Inc., so likely leased or registered to another entity",
    "confidence": "medium"
   }
- ]
+ ],
+ "type_short": {
+  "SW4": "Metro",
+  "SW3": "Merlin",
+  "PA31": "Chieftain",
+  "WW24": "Westwind",
+  "ASTR": "Astra"
+ }
 }

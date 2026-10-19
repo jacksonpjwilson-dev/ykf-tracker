@@ -42,7 +42,7 @@ cd docs && python3 -m http.server 18791            # view the page locally
 - **Skycare alert,** even when the aircraft isn't on FlightBridge. The aircraft counts as Skycare when its hex or registration is in the fleet list, or its callsign starts with `PHX`. It must be airborne inside 10 NM, heading toward the field (track within 60° of the bearing to CYKF, or within 3 NM), and either descending at 300 fpm or more, or below 5,000 ft and not climbing faster than 300 fpm. A Skycare aircraft that is passing over is ignored and doesn't appear on the page.
 - **Everything else** (overflights, training traffic, the other FBO's aircraft) is ignored and never stored.
 - **Once per aircraft per shift:** the dedup keys are the shift id plus hex and tail, saved in `state.json`, so a restart doesn't re-alert.
-- **Feeds:** airplanes.live first, then adsb.lol, then adsb.fi (opendata), with a 25 NM point query. adsb.lol is capped at 450 calls a day, because its header advertises `500;w=86400`. A 401 or 403 skips that provider for 6 h, a 429 for 10 min, and any other error for 1 min. At most 1 call per second per provider.
+- **Feeds:** airplanes.live first, then adsb.lol, then adsb.fi (opendata), with a 250 NM point query every poll, plus a Skycare fleet hex lookup every 2 min (see the call budget below). adsb.lol is capped at 450 calls a day, because its header advertises `500;w=86400`. A 401 or 403 skips that provider for 6 h, a 429 for 10 min, and any other error for 1 min. At most 1 call per second per provider.
 
 ## Alert file
 ```json
@@ -64,3 +64,24 @@ The rows carry only tail, type, ETA, distance, altitude, last seen, status and a
 - **Alerts:** each poll that produces alerts writes the pending files first, then opens ONE issue for the batch. The title is the alert text, the label is `alert`, it's assigned to jacksonpjwilson-dev, and the body has public fields only. The issue number is added to the pending files. A failure is logged and doesn't stop the tracker. Tower closes the issue after delivering.
 - **Test issue:** `python3 -m ykf.run test-issue --dry-run` previews it; drop `--dry-run` to create it.
 - **Dry runs:** `--shared` or `--dry-run` never publish or open issues.
+
+## Skycare early "inbound" alert (`alert_type: skycare-inbound`)
+This applies to unscheduled Skycare only (hex or registration in the fleet list, or a `PHX*` callsign, and not on FlightBridge). It runs in the same shift windows, on top of the 10 NM alert (`alert_type: near-10nm`). **Each alert fires once per aircraft per flight.** A new flight starts after a gap of more than 20 min, or when the aircraft goes from on the ground to airborne, so a later flight can alert again. The details are in `ykf/skyflight.py`:
+- The aircraft must be airborne, doing at least 60 kt, more than 10 NM out (inside that, the 10 NM alert covers it), and not on a flight that departed CYKF.
+- If the feed has a destination field and it says CYKF/YKF, that is enough. (adsb.lol and adsb.fi don't send this field today.)
+- Otherwise, the last 3 consecutive observations (about 1.5 min) must each have:
+  - track within **15°** of the bearing to CYKF (25° when descending at 500 fpm or more, because descent counts as a plus, not a requirement), and
+  - cross-track (closest approach on the current track) of **20 NM** or less,
+  - with distance to CYKF strictly decreasing across the 3.
+- **Departure from CYKF:** the first airborne observation is within 8 NM and the aircraft is climbing (more than +300 fpm) or moving away, or it was on the ground within 8 NM just before. That flight gets no early alert.
+- **Turning away:** if it turns away before qualifying, nothing is sent. If it turns away after the alert, it quietly drops off the page. There are no "cancelled" messages.
+- **Text:** `Skycare C-GKKC (PHX370) Metro inbound to YKF: 84 NM out, ETA ~22 min, 14,000 ft`. ETA is distance ÷ ground speed, rounded to the minute, and altitude is rounded to 100 ft.
+- **Page:** the aircraft shows as "inbound, N NM" with the note "unscheduled". No operator name.
+- **Known limit:** a Skycare flight to Toronto coming from the east lines up with YKF far out, and can look inbound until it descends.
+
+## Call budget (free feeds)
+- **Per poll (30 s):** one 250 NM point query, about 55–90 KB gzipped and about 600 aircraft.
+- **Every 120 s:** one fleet hex lookup, with all 27 hexes in one call and no range limit.
+- **Per shift window** (about 11 h, from 30 min before start to the end): 1,320 point calls + 330 fleet calls = **about 1,650 calls**. The busiest calendar day (for example Oct 21: 00:00–01:30 plus 07:30–18:30) is about 1,875.
+- **How it's split:** adsb.lol is capped at 450 calls a day (its header says `500;w=86400`). The rest go to adsb.fi, about 1,200–1,400 a shift, at most 1 call per second. That's within adsb.fi's published 1 req/s limit; it publishes no daily cap. airplanes.live is skipped while it returns 403.
+- **Outside windows:** zero calls.

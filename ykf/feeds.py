@@ -12,6 +12,13 @@ PROVIDERS = {
 }
 
 
+HEX_URLS = {  # comma-separated hex list, worldwide
+    "airplanes.live": "https://api.airplanes.live/v2/hex/{hexes}",
+    "adsb.lol": "https://api.adsb.lol/v2/hex/{hexes}",
+    "adsb.fi": "https://opendata.adsb.fi/api/v2/hex/{hexes}",
+}
+
+
 class FeedError(Exception):
     pass
 
@@ -31,11 +38,20 @@ class Feeds:
 
     def _get(self, url):
         req = urllib.request.Request(url, headers={"User-Agent": self.cfg["user_agent"],
-                                                   "Accept": "application/json"})
-        with urllib.request.urlopen(req, timeout=20) as r:
-            return json.load(r)
+                                                   "Accept": "application/json", "Accept-Encoding": "gzip"})
+        with urllib.request.urlopen(req, timeout=25) as r:
+            raw = r.read()
+            if r.headers.get("Content-Encoding") == "gzip":
+                import gzip
+                raw = gzip.decompress(raw)
+            return json.loads(raw)
 
-    def fetch(self):
+    def fetch_hexes(self, hexes):
+        """Worldwide lookup of a list of hexes in one call. Same fallback/budget rules."""
+        hx = ",".join(sorted(h for h in hexes if h))
+        return self.fetch(url_for=lambda name: HEX_URLS[name].format(hexes=hx))
+
+    def fetch(self, url_for=None):
         """Return (provider, now_epoch, aircraft list). Raises FeedError if all fail."""
         ap = self.cfg["airport"]
         errors = []
@@ -55,8 +71,11 @@ class Feeds:
             self.last_call[name] = time.time()
             ps["count"] += 1
             try:
-                data = self._get(tpl.format(lat=ap["lat"], lon=ap["lon"], r=self.cfg["query_radius_nm"]))
+                url = url_for(name) if url_for else tpl.format(lat=ap["lat"], lon=ap["lon"], r=self.cfg["query_radius_nm"])
+                data = self._get(url)
                 ac = data.get(key)
+                if ac is None:
+                    ac = data.get("ac", data.get("aircraft"))
                 if ac is None:
                     raise ValueError("no '%s' key" % key)
                 ps["last_ok"] = time.time()

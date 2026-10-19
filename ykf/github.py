@@ -6,7 +6,7 @@ import os
 import shutil
 import subprocess
 
-PUBLIC_ALERT_FIELDS = ("tail", "type", "distance_nm", "altitude_ft", "eta", "time")
+PUBLIC_ALERT_FIELDS = ("alert_type", "tail", "type", "distance_nm", "altitude_ft", "eta", "time")
 
 
 def _run(cmd, cwd=None, inp=None, timeout=90):

@@ -89,6 +89,7 @@ class Tracker:
         self.watch = {"by_hex": {}, "by_tail": {}}
         self.problems = []
         self.last_publish = 0
+        self.last_fleet = 0
         self.issue_dry_run = False
 
     def reload_arrivals(self):
@@ -109,6 +110,15 @@ class Tracker:
         try:
             provider, _, ac = self.feeds.fetch()
             feed_status = {"provider": provider, "ok": True, "count": len(ac)}
+            if time.time() - self.last_fleet >= self.cfg["fleet_lookup_every_s"]:
+                self.last_fleet = time.time()
+                try:
+                    _, _, fac = self.feeds.fetch_hexes(self.sky["hexes"].keys())
+                    have = {a.get("hex") for a in ac}
+                    ac = ac + [a for a in fac if a.get("hex") not in have]
+                    feed_status["fleet"] = len(fac)
+                except FeedError as e:
+                    log(self.cfg, "fleet lookup error: %s" % e)
         except FeedError as e:
             provider, ac = None, []
             feed_status = {"provider": None, "ok": False, "error": str(e)}
@@ -247,6 +257,8 @@ def cmd_supervise(cfg, online):
                     idle_published = nid
                 log(cfg, "idle until %s" % (iso(nxt["win_start"]) if nxt else "no window found"))
             prune_state(tr.state, {s["id"] for s in shifts if s["end"] > t - dt.timedelta(days=2)})
+            from .skyflight import prune as prune_flights
+            prune_flights(tr.state, t)
             atomic_json(cfg["paths"]["state"], tr.state)
             secs = 600 if not nxt else max(5, min(600, (nxt["win_start"] - t).total_seconds()))
             time.sleep(secs)  # cheap idle; recheck calendar at most every 10 min

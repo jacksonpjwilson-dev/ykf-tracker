@@ -9,7 +9,11 @@ DEFAULTS = {
     # CYKF aerodrome reference point (Canada Flight Supplement via Wikipedia): 43°27'39"N 080°22'43"W
     "airport": {"icao": "CYKF", "short": "YKF", "lat": 43.46083, "lon": -80.37861, "elev_ft": 1054},
     "alert_radius_nm": 10.0,
-    "query_radius_nm": 25,
+    # One 250 NM point query per poll covers the 10 NM alerts AND distant Skycare (PHX*) traffic.
+    "query_radius_nm": 250,
+    # Plus a Skycare fleet hex lookup (all fleet hexes in one call, worldwide) every N s,
+    # to catch fleet aircraft still beyond 250 NM.
+    "fleet_lookup_every_s": 120,
     "poll_seconds": 30,
     "pre_shift_minutes": 30,
     # Private: set in config/config.json (gitignored) or env YKF_CALENDAR_URL. Never commit it.
@@ -40,6 +44,9 @@ DEFAULTS = {
     # Inbound heuristic for unscheduled Skycare aircraft (see README)
     "skycare_inbound": {"max_alt_ft": 5000, "descent_fpm": -300, "max_climb_fpm": 300,
                         "toward_deg": 60, "close_nm": 3},
+    # Early 'Skycare inbound' alert (see ykf/skyflight.py)
+    "skycare_early": {"track_tol_deg": 15, "track_tol_desc_deg": 25, "desc_bonus_fpm": -500,
+                      "max_cross_track_nm": 20, "min_gs_kt": 60, "depart_nm": 8, "flight_gap_min": 20},
     "lost_after_s": 300,
     "page_show_operator": False,
     # Public live.json -> single-commit, force-pushed 'data' branch (raw.githubusercontent.com)

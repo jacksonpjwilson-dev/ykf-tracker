@@ -5,6 +5,7 @@ import json
 import os
 import re
 
+from . import skyflight
 from .geo import angle_diff, bearing_deg, distance_nm
 from .regs import norm_tail, pretty_tail
 from .timeutil import hhmm, iso
@@ -53,10 +54,17 @@ def load_skycare(path):
     with open(path) as f:
         doc = json.load(f)
     hexes = {f["hex"].lower(): f for f in doc["fleet"] if f.get("hex")}
+    shorts = doc.get("type_short", {})
     tails = {norm_tail(f["tail"]): f for f in doc["fleet"]}
     return {"hexes": hexes, "tails": tails,
             "callsign_prefixes": [p.upper() for p in doc.get("callsign_prefixes", [])],
-            "name": doc.get("operator", "Skycare")}
+            "name": doc.get("operator", "Skycare"), "type_short": shorts}
+
+
+def sky_short_type(sky, hexid, reg, feed_type):
+    f = sky["hexes"].get(hexid) or sky["tails"].get(reg) or {}
+    code = f.get("icao_type") or feed_type
+    return sky["type_short"].get(code, code or "")
 
 
 # ---------- feed normalisation ----------
@@ -88,7 +96,12 @@ def norm_aircraft(a, ap):
     brg_to_field = bearing_deg(lat, lon, ap["lat"], ap["lon"])
     toward = None if track is None else angle_diff(track, brg_to_field)
     seen = a.get("seen_pos", a.get("seen", 0)) or 0
-    return {"hex": hexid, "reg": reg, "flight": flight, "type": a.get("t") or "",
+    dest = ""
+    for k in ("dest", "destination", "dest_icao"):
+        if isinstance(a.get(k), str) and a.get(k).strip():
+            dest = a[k].strip().upper()
+            break
+    return {"hex": hexid, "reg": reg, "flight": flight, "type": a.get("t") or "", "dest": dest,
             "lat": lat, "lon": lon, "alt": alt, "ground": ground, "rate": rate,
             "track": track, "gs": a.get("gs"), "dist": d, "off_track_deg": toward, "seen_s": seen}
 
@@ -166,6 +179,7 @@ def step(feed_ac, watch, sky, state, shift, now, cfg):
     radius = cfg["alert_radius_nm"]
     sh = state.setdefault("shifts", {}).setdefault(shift["id"], {"alerted": {}, "tracks": {}})
     alerts = []
+    seen_keys = set()
     for raw in feed_ac:
         ac = norm_aircraft(raw, ap)
         if not ac:
@@ -173,22 +187,40 @@ def step(feed_ac, watch, sky, state, shift, now, cfg):
         w, is_sky = match(ac, watch, sky)
         if not w and not is_sky:
             continue  # overflights and everyone else: ignored entirely
-        tail = (w or {}).get("tail") or ac["reg"] or ac["flight"] or ac["hex"]
+        fleet = sky["hexes"].get(ac["hex"]) if not w else None
+        tail = (w or {}).get("tail") or (fleet and norm_tail(fleet["tail"])) or ac["reg"] or ac["flight"] or ac["hex"]
         key = ac["hex"] or tail
+        if key in seen_keys:
+            continue  # same aircraft from a second query this poll
+        seen_keys.add(key)
         typ = (w or {}).get("type") or ac["type"]
         eta = (w or {}).get("eta")
+        rec = None
         if w:
             fire = scheduled_alert_ok(ac, radius)
         else:
-            fire = skycare_inbound(ac, radius, cfg["skycare_inbound"])
+            # unscheduled Skycare: early inbound alert + 10 NM alert, each once per flight
+            rec, early = skyflight.observe(state, key, ac, now, cfg)
+            if early:
+                short = sky_short_type(sky, ac["hex"], ac["reg"], ac["type"])
+                alerts.append(skyflight.inbound_alert(rec, tail, typ, short, ac, now, shift, cfg))
+            fire = skycare_inbound(ac, radius, cfg["skycare_inbound"]) and not rec["near_alerted"]
         tr = sh["tracks"].get(tail) or {}
-        if not w and not fire and tail not in sh["tracks"]:
-            continue  # Skycare passing by, not inbound: not shown
+        if rec is not None:
+            showing = rec["inbound_alerted"] and not rec["turned_away"]
+            if not fire and not showing and not rec["near_alerted"]:
+                sh["tracks"].pop(tail, None)  # passing by / turned away: not shown
+                continue
+            tr["inbound"] = bool(showing and ac["dist"] > radius)
         tr.update(tail=tail, hex=ac["hex"], type=typ, eta=eta, scheduled=bool(w), skycare=is_sky,
                   dist_nm=round(ac["dist"], 1), alt_ft=ac["alt"], ground=ac["ground"],
                   rate_fpm=ac["rate"], gs_kt=ac["gs"], last_seen=iso(now))
         sh["tracks"][tail] = tr
-        if fire and key not in sh["alerted"] and tail not in sh["alerted"]:
+        if rec is not None and fire:
+            rec["near_alerted"] = iso(now)
+        elif fire and (key in sh["alerted"] or tail in sh["alerted"]):
+            fire = False
+        if fire:
             sh["alerted"][key] = iso(now)
             sh["alerted"][tail] = iso(now)
             tr["alerted_at"] = iso(now)
@@ -196,6 +228,7 @@ def step(feed_ac, watch, sky, state, shift, now, cfg):
                               ap["short"], scheduled=bool(w))
             alerts.append({
                 "id": "%s-%s-%s" % (shift["id"].replace(":", ""), tail, now.strftime("%H%M%S")),
+                "alert_type": "near-10nm",
                 "created": iso(now), "time": hhmm(now),
                 "shift": {"id": shift["id"], "start": iso(shift["start"]), "end": iso(shift["end"])},
                 "tail": pretty_tail(tail), "hex": ac["hex"], "type": typ,
@@ -226,6 +259,8 @@ def live_rows(state, shift, watch, now, cfg):
             status = "landed?" if t.get("alerted_at") and t["dist_nm"] <= 4 else "lost signal"
         elif t["dist_nm"] <= cfg["alert_radius_nm"]:
             status = "inside 10 NM"
+        elif t.get("inbound"):
+            status = "inbound, %d NM" % round(t["dist_nm"])
         else:
             status = "tracking"
         r = rows.get(tail) or {"tail": pretty_tail(tail), "type": t["type"], "eta": t.get("eta"),
@@ -234,8 +269,8 @@ def live_rows(state, shift, watch, now, cfg):
                  last_seen=t["last_seen"], status=status, skycare=t.get("skycare", False),
                  alerted_at=t.get("alerted_at"))
         rows[tail] = r
-    order = {"inside 10 NM": 0, "tracking": 1, "expected": 2, "on ground": 3, "landed?": 4, "lost signal": 5}
-    out = sorted(rows.values(), key=lambda r: (order.get(r["status"], 9), r["dist_nm"] if r["dist_nm"] is not None else 999, r["eta"] or "99"))
+    order = {"inside 10 NM": 0, "inbound": 0.5, "tracking": 1, "expected": 2, "on ground": 3, "landed?": 4, "lost signal": 5}
+    out = sorted(rows.values(), key=lambda r: (order.get(r["status"].split(",")[0], 9), r["dist_nm"] if r["dist_nm"] is not None else 999, r["eta"] or "99"))
     if not cfg.get("page_show_operator"):
         for r in out:
             if r.pop("skycare", False):

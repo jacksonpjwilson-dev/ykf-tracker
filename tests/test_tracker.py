@@ -178,6 +178,131 @@ class Logic(unittest.TestCase):
         self.assertNotIn("Owner", json.dumps(rows))
 
 
+class SkycareEarly(unittest.TestCase):
+    """Early 'skycare-inbound' alert heuristic."""
+    def setUp(self):
+        self.sky = load_skycare(os.path.join(ROOT, "config", "skycare.json"))
+        self.watch = {"by_hex": {}, "by_tail": {}}
+        self.t0 = dt.datetime(2026, 10, 20, 16, 0, tzinfo=TZ)
+        self.hex = canada_hex("CGKKC")
+
+    def run_seq(self, recs, st=None, sh=None, start=0):
+        st = {} if st is None else st
+        sh = sh or shift()
+        out = []
+        for i, r in enumerate(recs):
+            out.append(step([r], self.watch, self.sky, st, sh, self.t0 + dt.timedelta(seconds=30 * (i + start)), CFG))
+        return st, out
+
+    def inbound_seq(self, d0=84, brg=315, n=4, gs=230, **kw):
+        step_nm = gs * 30 / 3600.0
+        base = dict(hex=self.hex, r="C-GKKC", flight="PHX370", t="SW4", alt_baro=14000, baro_rate=-200, gs=gs)
+        base.update(kw)
+        return [ac_at(d0 - i * step_nm, brg, **base) for i in range(n)]
+
+    def kinds(self, out):
+        return [[a["alert_type"] for a in o] for o in out]
+
+    def test_inbound_fires_on_third_obs_once(self):
+        st, out = self.run_seq(self.inbound_seq(n=6))
+        self.assertEqual(self.kinds(out), [[], [], ["skycare-inbound"], [], [], []])
+        a = out[2][0]
+        self.assertEqual(a["text"], "Skycare C-GKKC (PHX370) Metro inbound to YKF: 80 NM out, ETA ~21 min, 14,000 ft")
+        self.assertEqual(a["eta"], "~21 min")
+        rows = live_rows(st, shift(), self.watch, self.t0 + dt.timedelta(minutes=3), CFG)
+        self.assertEqual(rows[0]["status"], "inbound, 74 NM")
+        self.assertEqual(rows[0]["note"], "unscheduled")
+        self.assertNotIn("Skycare", json.dumps(rows))
+
+    def test_then_10nm_alert_once_per_flight(self):
+        st, _ = self.run_seq(self.inbound_seq(n=3))
+        near = [ac_at(9, 315, hex=self.hex, r="C-GKKC", flight="PHX370", alt_baro=3500, baro_rate=-700, gs=150),
+                ac_at(8, 315, hex=self.hex, r="C-GKKC", flight="PHX370", alt_baro=3000, baro_rate=-700, gs=150)]
+        _, out = self.run_seq(near, st, start=3)
+        self.assertEqual(self.kinds(out), [["near-10nm"], []])
+
+    def test_new_flight_after_gap_can_alert_again(self):
+        st, _ = self.run_seq(self.inbound_seq(n=3))
+        # 2 h later (new flight): fresh inbound alert, even in the same shift
+        _, out = self.run_seq(self.inbound_seq(n=3, d0=120), st, start=240)
+        self.assertEqual(self.kinds(out), [[], [], ["skycare-inbound"]])
+
+    def test_overflight_offset_track_no_alert(self):
+        # parallel track passing 30 NM abeam: off-track grows from ~20 deg, cross-track 30 NM
+        recs = []
+        for i in range(5):
+            r = ac_at(80 - i * 2, 315, hex=self.hex, alt_baro=15000, baro_rate=0, gs=240)
+            r["track"] = (315 + 180 + 22) % 360
+            recs.append(r)
+        _, out = self.run_seq(recs)
+        self.assertEqual(sum(len(o) for o in out), 0)
+
+    def test_high_overflight_across_no_alert(self):
+        recs = [ac_at(40, 0, hex=self.hex, alt_baro=28000, baro_rate=0, gs=400, track=90)] * 1
+        recs = [ac_at(40, 0 + i, hex=self.hex, alt_baro=28000, baro_rate=0, gs=400, track=90) for i in range(4)]
+        _, out = self.run_seq(recs)
+        self.assertEqual(sum(len(o) for o in out), 0)
+
+    def test_departure_from_cykf_no_alert(self):
+        # on the ground at YKF, then airborne climbing out and later turning back toward the field far out
+        recs = [ac_at(0.3, 90, hex=self.hex, alt_baro="ground", gs=0)]
+        recs += [ac_at(2 + i * 2, 270, hex=self.hex, alt_baro=2000 + i * 1500, baro_rate=1500, gs=180, track=270) for i in range(3)]
+        recs += self.inbound_seq(n=3, d0=30, brg=270)  # same flight swings back toward the field
+        _, out = self.run_seq(recs)
+        self.assertEqual([k for o in self.kinds(out) for k in o], [])
+
+    def test_first_seen_close_and_climbing_is_departure(self):
+        recs = [ac_at(5 + i * 1.5, 45, hex=self.hex, alt_baro=3000 + i * 800, baro_rate=1200, gs=180, track=45) for i in range(4)]
+        st, out = self.run_seq(recs)
+        self.assertTrue(st["sky_flights"][self.hex]["departed_ykf"])
+        self.assertEqual(sum(len(o) for o in out), 0)
+
+    def test_turn_away_before_three_no_alert_and_no_cancel(self):
+        recs = self.inbound_seq(n=2)
+        away = ac_at(83, 315, hex=self.hex, alt_baro=14000, gs=230)
+        away["track"] = 315  # pointing away from the field
+        recs += [away, ac_at(84, 315, hex=self.hex, alt_baro=14000, gs=230, track=315), ac_at(85, 315, hex=self.hex, alt_baro=14000, gs=230, track=315)]
+        st, out = self.run_seq(recs)
+        self.assertEqual(sum(len(o) for o in out), 0)
+
+    def test_turn_away_after_alert_drops_quietly(self):
+        st, out = self.run_seq(self.inbound_seq(n=3))
+        recs = [ac_at(78 + i, 315, hex=self.hex, alt_baro=14000, gs=230, track=315) for i in range(3)]
+        st, out2 = self.run_seq(recs, st, start=3)
+        self.assertEqual(sum(len(o) for o in out2), 0)  # no 'cancelled'
+        rows = live_rows(st, shift(), self.watch, self.t0 + dt.timedelta(minutes=4), CFG)
+        self.assertEqual(rows, [])
+
+    def test_descent_widens_tolerance(self):
+        recs = self.inbound_seq(n=3, d0=40, baro_rate=-1200)
+        for r in recs:
+            r["track"] = (r["track"] + 20) % 360  # 20 deg off: only OK because descending
+        _, out = self.run_seq(recs)
+        self.assertEqual(self.kinds(out)[-1], ["skycare-inbound"])
+        recs = self.inbound_seq(n=3, d0=40, baro_rate=0)
+        for r in recs:
+            r["track"] = (r["track"] + 20) % 360
+        _, out = self.run_seq(recs, start=500)
+        self.assertEqual(sum(len(o) for o in out), 0)
+
+    def test_dest_field_wins(self):
+        recs = [ac_at(150, 270, hex=self.hex, flight="PHX370", alt_baro=20000, gs=250, dest="CYKF")]
+        recs[0]["track"] = 0  # even off-track
+        _, out = self.run_seq(recs)
+        self.assertEqual(self.kinds(out), [["skycare-inbound"]])
+
+    def test_unknown_phx_callsign_counts(self):
+        recs = [ac_at(60 - i * 2, 200, hex="c0beef", flight="PHX999", t="SW4", alt_baro=12000, gs=240) for i in range(3)]
+        _, out = self.run_seq(recs)
+        self.assertEqual(self.kinds(out)[-1], ["skycare-inbound"])
+
+    def test_scheduled_skycare_gets_no_early_alert(self):
+        r = Resolver("/tmp/ykf-test-regs.json", None)
+        self.watch = build_watch([{"tail": "CGKKC", "type": "Metro", "eta": "17:00"}], r, online=False)
+        _, out = self.run_seq(self.inbound_seq(n=4))
+        self.assertEqual(sum(len(o) for o in out), 0)
+
+
 class Issues(unittest.TestCase):
     def test_batch_title_and_public_body(self):
         from ykf import github as gh
