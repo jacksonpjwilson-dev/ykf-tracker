@@ -1,0 +1,261 @@
+{
+ "operator": "SkyCare Air Ambulance (2080061 Ontario Inc.)",
+ "icao_designator": "PHX",
+ "radio_callsign": "PHOENIX NORTH",
+ "callsign_prefixes": [
+  "PHX"
+ ],
+ "notes": [
+  "Skycare lists a Kitchener base (skycare.ca), plus Sioux Lookout, Thunder Bay and St Andrews MB.",
+  "Callsigns seen live are PHX + aircraft serial (PHX303 = C-FXDP s/n 303, PHX370 = C-GKKC s/n TC-370), so the PHX prefix catches fleet changes not listed here.",
+  "Hex values are computed with Canada's sequential C-F/C-G allocation, which matched 670 of 670 C- and N- registered aircraft in a live sample on 2026-10-19. Refresh against the CCAR download when the box can reach tc.gc.ca.",
+  "Types are the CCAR model names; the ICAO type codes are best guesses (CCAR lists C-FIOA as both SA227-AT and SA227-AC in different views; C-FRPX/C-GCPX may show as SW3/SW4)."
+ ],
+ "sources": [
+  {
+   "what": "CCAR quick search by owner 2080061 ONTARIO INC. (26 records)",
+   "url": "https://wwwapps.tc.gc.ca/Saf-Sec-Sur/2/CCARCS-RIACC/RchSimpRes.aspx?cn=%7C%7C&mn=%7C%7C&sn=%7C%7C&on=2080061+ONTARIO+INC.%7C&m=%7C%7C&print=y"
+  },
+  {
+   "what": "Transport Canada operator record 15337: legal name 2080061 ONTARIO INC., trade name SKYCARE AIR AMBULANCE",
+   "url": "https://wwwapps.tc.gc.ca/saf-sec-sur/2/CAS-SAC/olsrler.aspx?id=15337&lang=eng&n=SkyCare"
+  },
+  {
+   "what": "ICAO designator PHX, callsign Phoenix North",
+   "url": "https://www.avcodes.co.uk/details.asp?ID=30051"
+  },
+  {
+   "what": "RegoSearch CCAR mirror, C-FIOA owner 2080061 Ontario Inc. (SkyCare Air Ambulance)",
+   "url": "https://www.regosearch.com/aircraft/ca/FIOA"
+  },
+  {
+   "what": "Planespotting.be active fleet (C-FIOH, C-FXDP, C-GCPX, C-GIAW)",
+   "url": "https://www.planespotting.be/index.php?id=2931&page=operator"
+  },
+  {
+   "what": "Skycare bases incl. Kitchener",
+   "url": "https://www.skycare.ca/"
+  }
+ ],
+ "retrieved": "2026-10-19",
+ "fleet": [
+  {
+   "tail": "C-FAJR",
+   "hex": "c000fc",
+   "type": "Piper PA-31-350",
+   "icao_type": "PA31",
+   "source": "ccar",
+   "confidence": "high"
+  },
+  {
+   "tail": "C-FAQR",
+   "hex": "c001b2",
+   "type": "Piper PA-31-350",
+   "icao_type": "PA31",
+   "source": "ccar",
+   "confidence": "high"
+  },
+  {
+   "tail": "C-FBHO",
+   "hex": "c00369",
+   "type": "Piper PA-31-350",
+   "icao_type": "PA31",
+   "source": "ccar",
+   "confidence": "high"
+  },
+  {
+   "tail": "C-FDVO",
+   "hex": "c00a1d",
+   "type": "Piper PA-31-350",
+   "icao_type": "PA31",
+   "source": "ccar",
+   "confidence": "high"
+  },
+  {
+   "tail": "C-FEGP",
+   "hex": "c00b3c",
+   "type": "Piper PA-31-350",
+   "icao_type": "PA31",
+   "source": "ccar",
+   "confidence": "high"
+  },
+  {
+   "tail": "C-FIOA",
+   "hex": "c0168d",
+   "type": "Swearingen/Fairchild SA227 Metro",
+   "icao_type": "SW4",
+   "source": "ccar",
+   "confidence": "high"
+  },
+  {
+   "tail": "C-FIOB",
+   "hex": "c0168e",
+   "type": "Swearingen SA227-AC Metro III",
+   "icao_type": "SW4",
+   "source": "ccar",
+   "confidence": "high"
+  },
+  {
+   "tail": "C-FIOC",
+   "hex": "c0168f",
+   "type": "Swearingen SA227-AC Metro III",
+   "icao_type": "SW4",
+   "source": "ccar",
+   "confidence": "high"
+  },
+  {
+   "tail": "C-FIOH",
+   "hex": "c01694",
+   "type": "Swearingen SA227-AC Metro III",
+   "icao_type": "SW4",
+   "source": "ccar",
+   "confidence": "high"
+  },
+  {
+   "tail": "C-FIOJ",
+   "hex": "c01696",
+   "type": "Fairchild SA227-AC Metro III",
+   "icao_type": "SW4",
+   "source": "ccar",
+   "confidence": "high"
+  },
+  {
+   "tail": "C-FJXR",
+   "hex": "c01a2c",
+   "type": "Piper PA-31-350",
+   "icao_type": "PA31",
+   "source": "ccar",
+   "confidence": "high"
+  },
+  {
+   "tail": "C-FRPX",
+   "hex": "c02e82",
+   "type": "Fairchild SA227-TT Merlin IIIC",
+   "icao_type": "SW3",
+   "source": "ccar",
+   "confidence": "high"
+  },
+  {
+   "tail": "C-FTJX",
+   "hex": "c0332e",
+   "type": "Piper PA-31-350",
+   "icao_type": "PA31",
+   "source": "ccar",
+   "confidence": "high"
+  },
+  {
+   "tail": "C-FXDP",
+   "hex": "c03d1a",
+   "type": "IAI 1124 Westwind",
+   "icao_type": "WW24",
+   "source": "ccar",
+   "confidence": "high",
+   "seen_live": "2026-10-19 callsign PHX303"
+  },
+  {
+   "tail": "C-GCJH",
+   "hex": "c04ae2",
+   "type": "Piper PA-31-350",
+   "icao_type": "PA31",
+   "source": "ccar",
+   "confidence": "high"
+  },
+  {
+   "tail": "C-GCPX",
+   "hex": "c04b8e",
+   "type": "Swearingen SA226-AT Merlin IVA",
+   "icao_type": "SW4",
+   "source": "ccar",
+   "confidence": "high"
+  },
+  {
+   "tail": "C-GIAW",
+   "hex": "c059df",
+   "type": "IAI 1124A Westwind",
+   "icao_type": "WW24",
+   "source": "ccar",
+   "confidence": "high"
+  },
+  {
+   "tail": "C-GJHX",
+   "hex": "c05d3a",
+   "type": "Piper PA-31-350",
+   "icao_type": "PA31",
+   "source": "ccar",
+   "confidence": "high"
+  },
+  {
+   "tail": "C-GJNH",
+   "hex": "c05dc6",
+   "type": "Piper PA-31-350",
+   "icao_type": "PA31",
+   "source": "ccar",
+   "confidence": "high"
+  },
+  {
+   "tail": "C-GJRH",
+   "hex": "c05e2e",
+   "type": "Piper PA-31-350",
+   "icao_type": "PA31",
+   "source": "ccar",
+   "confidence": "high"
+  },
+  {
+   "tail": "C-GKKC",
+   "hex": "c06017",
+   "type": "Swearingen SA226-TC Metro II",
+   "icao_type": "SW4",
+   "source": "ccar",
+   "confidence": "high",
+   "seen_live": "2026-10-19 callsign PHX370"
+  },
+  {
+   "tail": "C-GKPX",
+   "hex": "c060ae",
+   "type": "Swearingen SA226-TC Metro II",
+   "icao_type": "SW4",
+   "source": "ccar",
+   "confidence": "high"
+  },
+  {
+   "tail": "C-GQXD",
+   "hex": "c07142",
+   "type": "Piper PA-31-350",
+   "icao_type": "PA31",
+   "source": "ccar",
+   "confidence": "high"
+  },
+  {
+   "tail": "C-GQXX",
+   "hex": "c07156",
+   "type": "Piper PA-31-350",
+   "icao_type": "PA31",
+   "source": "ccar",
+   "confidence": "high"
+  },
+  {
+   "tail": "C-GTIM",
+   "hex": "c077b1",
+   "type": "Swearingen SA226-TC Metro II",
+   "icao_type": "SW4",
+   "source": "ccar",
+   "confidence": "high"
+  },
+  {
+   "tail": "C-GTJF",
+   "hex": "c077c4",
+   "type": "Piper PA-31-350",
+   "icao_type": "PA31",
+   "source": "ccar",
+   "confidence": "high"
+  },
+  {
+   "tail": "C-FDAX",
+   "hex": "c00804",
+   "type": "IAI 1125 Astra",
+   "icao_type": "ASTR",
+   "source": "live ADS-B 2026-10-19 (adsb.fi), callsign PHX58; not in the CCAR owner search for 2080061 Ontario Inc., so likely leased or registered to another entity",
+   "confidence": "medium"
+  }
+ ]
+}

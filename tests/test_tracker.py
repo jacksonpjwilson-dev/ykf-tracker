@@ -1,0 +1,252 @@
+import datetime as dt
+import json
+import os
+import sys
+import tempfile
+import unittest
+
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+from ykf import config
+from ykf.core import alert_text, build_watch, live_rows, load_skycare, skycare_inbound, step, norm_aircraft
+from ykf.geo import distance_nm, bearing_deg, angle_diff
+from ykf.regs import canada_hex, us_hex, norm_tail, pretty_tail, Resolver
+from ykf.shifts import parse_shifts, current_window, https_url
+from ykf.timeutil import TZ
+
+CFG = config.load()
+AP = CFG["airport"]
+ROOT = config.ROOT
+
+
+def ac_at(dist_nm, bearing_from_field, **kw):
+    """Fake feed record dist_nm from CYKF on the given bearing (flat-earth approx, fine < 30 NM)."""
+    import math
+    dlat = dist_nm / 60.0 * math.cos(math.radians(bearing_from_field))
+    dlon = dist_nm / 60.0 * math.sin(math.radians(bearing_from_field)) / math.cos(math.radians(AP["lat"]))
+    rec = {"lat": AP["lat"] + dlat, "lon": AP["lon"] + dlon, "alt_baro": 3000, "baro_rate": -500,
+           "track": (bearing_from_field + 180) % 360, "gs": 160}
+    rec.update(kw)
+    return rec
+
+
+class Geo(unittest.TestCase):
+    def test_known_distance(self):
+        # CYKF -> CYYZ (43.6772,-79.6306) is about 35.3 NM
+        self.assertAlmostEqual(distance_nm(AP["lat"], AP["lon"], 43.6772, -79.6306), 35.3, delta=0.3)
+
+    def test_zero_and_symmetry(self):
+        self.assertAlmostEqual(distance_nm(1, 2, 1, 2), 0.0)
+        a = distance_nm(43.4, -80.3, 44.1, -79.1)
+        self.assertAlmostEqual(a, distance_nm(44.1, -79.1, 43.4, -80.3))
+
+    def test_one_degree_lat_is_60nm(self):
+        self.assertAlmostEqual(distance_nm(43, -80, 44, -80), 60.0, delta=0.1)
+
+    def test_fake_points(self):
+        for d in (2, 9.6, 10.4, 20):
+            r = ac_at(d, 45)
+            self.assertAlmostEqual(distance_nm(r["lat"], r["lon"], AP["lat"], AP["lon"]), d, delta=0.05)
+
+    def test_bearing(self):
+        self.assertAlmostEqual(bearing_deg(43, -80, 44, -80), 0, delta=0.01)
+        self.assertEqual(angle_diff(350, 10), 20)
+        self.assertEqual(angle_diff(90, 270), 180)
+
+
+class Regs(unittest.TestCase):
+    def test_canada(self):
+        # pairs seen live on 2026-10-19
+        self.assertEqual(canada_hex("C-GGBN"), "c054a8")
+        self.assertEqual(canada_hex("CGUSB"), "c07b4e")
+        self.assertEqual(canada_hex("C-FXDP"), "c03d1a")
+        self.assertEqual(canada_hex("C-FDAX"), "c00804")
+        self.assertIsNone(canada_hex("C-IABC"))
+
+    def test_us(self):
+        self.assertEqual(us_hex("N1"), "a00001")
+        self.assertEqual(us_hex("N2"), "a18d50")  # 0xa00001 + 101711
+        self.assertIsNone(us_hex("N0123"))
+
+    def test_norm(self):
+        self.assertEqual(norm_tail(" c-ggib "), "CGGIB")
+        self.assertEqual(pretty_tail("CGGIB"), "C-GGIB")
+
+    def test_resolver_offline(self):
+        with tempfile.TemporaryDirectory() as d:
+            r = Resolver(os.path.join(d, "c.json"), os.path.join(d, "none"))
+            self.assertEqual(r.resolve("CGGIB", online=False), (canada_hex("CGGIB"), "algorithm"))
+            self.assertEqual(r.resolve("D-ABCD", online=False), (None, "unresolved"))
+
+
+def shift(start="2026-10-20T15:00"):
+    s = dt.datetime.fromisoformat(start).replace(tzinfo=TZ)
+    return {"id": start, "start": s, "end": s + dt.timedelta(hours=10), "win_start": s - dt.timedelta(minutes=30),
+            "win_end": s + dt.timedelta(hours=10)}
+
+
+class Logic(unittest.TestCase):
+    def setUp(self):
+        self.sky = load_skycare(os.path.join(ROOT, "config", "skycare.json"))
+        r = Resolver("/tmp/ykf-test-regs.json", None)
+        self.watch = build_watch([{"tail": "CGGIB", "type": "Citation XLS", "eta": None},
+                                  {"tail": "CFABC", "type": "PC-12", "eta": "16:10"}], r, online=False)
+        self.t = dt.datetime(2026, 10, 20, 16, 0, tzinfo=TZ)
+
+    def test_once_per_aircraft_per_shift(self):
+        st = {}
+        sh = shift()
+        rec = ac_at(9.6, 90, hex=canada_hex("CGGIB"), r="C-GGIB", t="C56X", alt_baro=3200)
+        a1 = step([rec], self.watch, self.sky, st, sh, self.t, CFG)
+        self.assertEqual(len(a1), 1)
+        self.assertEqual(a1[0]["text"], "C-GGIB Citation XLS 9.6 NM from YKF, 3,200 ft, no ETA")
+        closer = ac_at(4, 90, hex=canada_hex("CGGIB"), r="C-GGIB", alt_baro=1800)
+        for i in range(5):
+            self.assertEqual(step([closer], self.watch, self.sky, st, sh, self.t + dt.timedelta(seconds=30 * (i + 1)), CFG), [])
+        # new shift -> may alert again
+        a3 = step([rec], self.watch, self.sky, st, shift("2026-10-21T08:00"), self.t + dt.timedelta(hours=16), CFG)
+        self.assertEqual(len(a3), 1)
+
+    def test_outside_radius_no_alert_but_tracked(self):
+        st = {}
+        a = step([ac_at(10.4, 0, hex=canada_hex("CFABC"))], self.watch, self.sky, st, shift(), self.t, CFG)
+        self.assertEqual(a, [])
+        rows = live_rows(st, shift(), self.watch, self.t, CFG)
+        row = [r for r in rows if r["tail"] == "C-FABC"][0]
+        self.assertEqual(row["status"], "tracking")
+        self.assertEqual(row["eta"], "16:10")
+
+    def test_eta_in_text_and_match_by_callsign_only(self):
+        st = {}
+        rec = ac_at(7, 200, flight="CFABC   ", alt_baro=2500)  # no hex, no r
+        a = step([rec], self.watch, self.sky, st, shift(), self.t, CFG)
+        self.assertEqual(len(a), 1)
+        self.assertIn("ETA 16:10", a[0]["text"])
+
+    def test_overflight_ignored(self):
+        st = {}
+        a = step([ac_at(1, 0, hex="c0ffee", r="C-GZZZ", alt_baro=35000, baro_rate=0)], self.watch, self.sky, st, shift(), self.t, CFG)
+        self.assertEqual(a, [])
+        self.assertEqual(st["shifts"][shift()["id"]]["tracks"], {})
+
+    def test_scheduled_on_ground_or_departing_no_alert(self):
+        st = {}
+        g = ac_at(0.3, 0, hex=canada_hex("CGGIB"), alt_baro="ground")
+        dep = ac_at(5, 90, hex=canada_hex("CGGIB"), alt_baro=3000, baro_rate=1500, track=90)
+        self.assertEqual(step([g], self.watch, self.sky, st, shift(), self.t, CFG), [])
+        self.assertEqual(step([dep], self.watch, self.sky, st, shift(), self.t, CFG), [])
+
+    def test_skycare_inbound(self):
+        st = {}
+        rec = ac_at(8.9, 300, hex=canada_hex("CFIOH"), r="C-FIOH", t="SW4", alt_baro=3100, baro_rate=-700, flight="PHX432")
+        a = step([rec], self.watch, self.sky, st, shift(), self.t, CFG)
+        self.assertEqual(len(a), 1)
+        self.assertTrue(a[0]["skycare"])
+        self.assertFalse(a[0]["on_flightbridge"])
+        self.assertEqual(a[0]["text"], "Skycare C-FIOH SW4 8.9 NM from YKF, 3,100 ft, not on FlightBridge")
+
+    def test_skycare_by_callsign_prefix_unknown_tail(self):
+        st = {}
+        rec = ac_at(6, 0, hex="c0abcd", flight="PHX999", alt_baro=4000, baro_rate=-200)
+        self.assertEqual(len(step([rec], self.watch, self.sky, st, shift(), self.t, CFG)), 1)
+
+    def test_skycare_not_inbound(self):
+        h = CFG["skycare_inbound"]
+        R = CFG["alert_radius_nm"]
+        n = lambda rec: norm_aircraft(rec, AP)
+        self.assertFalse(skycare_inbound(n(ac_at(6, 0, alt_baro=28000, baro_rate=0)), R, h))  # high cruise overhead
+        self.assertFalse(skycare_inbound(n(ac_at(6, 0, alt_baro=3000, baro_rate=-800, track=0)), R, h))  # heading away
+        self.assertFalse(skycare_inbound(n(ac_at(5, 90, alt_baro=2500, baro_rate=1800, track=90)), R, h))  # departing climb
+        self.assertFalse(skycare_inbound(n(ac_at(12, 0, alt_baro=3000, baro_rate=-800)), R, h))  # outside 10 NM
+        self.assertTrue(skycare_inbound(n(ac_at(9, 0, alt_baro=12000, baro_rate=-1500)), R, h))  # descending in
+        self.assertTrue(skycare_inbound(n(ac_at(2, 0, alt_baro=1800, baro_rate=0, track=0)), R, h))  # circuit near field
+        self.assertFalse(skycare_inbound(n(ac_at(1, 0, alt_baro="ground")), R, h))
+
+    def test_skycare_passing_not_shown(self):
+        st = {}
+        step([ac_at(6, 0, hex=canada_hex("CFIOH"), alt_baro=28000, baro_rate=0)], self.watch, self.sky, st, shift(), self.t, CFG)
+        rows = live_rows(st, shift(), self.watch, self.t, CFG)
+        self.assertEqual([r["tail"] for r in rows if r["tail"] == "C-FIOH"], [])
+
+    def test_live_privacy_fields(self):
+        st = {}
+        step([ac_at(8, 300, hex=canada_hex("CFIOH"), alt_baro=3000, baro_rate=-700, ownOp="Some Owner")], self.watch, self.sky, st, shift(), self.t, CFG)
+        rows = live_rows(st, shift(), self.watch, self.t, CFG)
+        allowed = {"tail", "type", "eta", "dist_nm", "alt", "last_seen", "status", "scheduled", "alerted_at", "note"}
+        for r in rows:
+            self.assertTrue(set(r) <= allowed, set(r) - allowed)
+        self.assertNotIn("Skycare", json.dumps(rows))
+        self.assertNotIn("Owner", json.dumps(rows))
+
+
+class Issues(unittest.TestCase):
+    def test_batch_title_and_public_body(self):
+        from ykf import github as gh
+        a = [{"text": "C-GGIB Citation XLS 9.6 NM from YKF, 3,200 ft, no ETA", "tail": "C-GGIB", "type": "Citation XLS",
+              "distance_nm": 9.6, "altitude_ft": 3200, "eta": "no ETA", "time": "17:45", "hex": "c05552", "id": "x",
+              "shift": {"id": "s"}, "skycare": False},
+             {"text": "Skycare C-FIOH SW4 8.9 NM from YKF, 3,100 ft, not on FlightBridge", "tail": "C-FIOH", "type": "SW4",
+              "distance_nm": 8.9, "altitude_ft": 3100, "eta": "no ETA", "time": "17:45", "hex": "c01694", "id": "y"}]
+        self.assertEqual(gh.issue_title(a[:1]), a[0]["text"])
+        self.assertTrue(gh.issue_title(a).startswith("2 YKF arrivals: C-GGIB"))
+        body = gh.issue_body(a)
+        for bad in ("c05552", "shift", '"id"', "hex"):
+            self.assertNotIn(bad, body)
+        self.assertIn('"distance_nm": 8.9', body)
+
+
+ICS = b"""BEGIN:VCALENDAR
+VERSION:2.0
+BEGIN:VEVENT
+UID:1
+DTSTART;TZID=America/Toronto:20261020T150000
+DTEND;TZID=America/Toronto:20261021T013000
+SUMMARY:Chartright
+END:VEVENT
+BEGIN:VEVENT
+UID:2
+DTSTART;TZID=America/Toronto:20261021T180000
+DTEND;TZID=America/Toronto:20261021T210000
+SUMMARY:EA shift
+END:VEVENT
+BEGIN:VEVENT
+UID:3
+DTSTART;VALUE=DATE:20261023
+DTEND;VALUE=DATE:20261024
+SUMMARY:Chartright day off
+END:VEVENT
+BEGIN:VEVENT
+UID:4
+DTSTART;TZID=America/Toronto:20261101T050000
+DTEND;TZID=America/Toronto:20261101T153000
+SUMMARY:Chartright
+END:VEVENT
+END:VCALENDAR
+"""
+
+
+class Shifts(unittest.TestCase):
+    def test_parse(self):
+        start = dt.datetime(2026, 10, 19, tzinfo=TZ)
+        s = parse_shifts(ICS, CFG, start, start + dt.timedelta(days=30))
+        self.assertEqual([x["id"] for x in s], ["2026-10-20T15:00", "2026-11-01T05:00"])
+        self.assertEqual(s[0]["win_start"].strftime("%H:%M"), "14:30")
+        # DST end Nov 1: 05:00 is EST (-05:00)
+        self.assertEqual(s[1]["start"].utcoffset(), dt.timedelta(hours=-5))
+        self.assertEqual(s[1]["win_start"].isoformat(), "2026-11-01T04:30:00-05:00")
+
+    def test_window(self):
+        start = dt.datetime(2026, 10, 19, tzinfo=TZ)
+        s = parse_shifts(ICS, CFG, start, start + dt.timedelta(days=30))
+        at = lambda *a: current_window(s, dt.datetime(*a, tzinfo=TZ))
+        self.assertIsNone(at(2026, 10, 20, 14, 29))
+        self.assertEqual(at(2026, 10, 20, 14, 30)["id"], "2026-10-20T15:00")
+        self.assertEqual(at(2026, 10, 21, 1, 29)["id"], "2026-10-20T15:00")
+        self.assertIsNone(at(2026, 10, 21, 1, 30))
+        self.assertIsNone(at(2026, 10, 21, 19, 0))  # EA shift
+
+    def test_webcal(self):
+        self.assertEqual(https_url("webcal://x.icloud.com/a"), "https://x.icloud.com/a")
+
+
+if __name__ == "__main__":
+    unittest.main()

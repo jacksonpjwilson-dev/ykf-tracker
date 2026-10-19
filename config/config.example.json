@@ -1,0 +1,5 @@
+{
+ "calendar_url": "webcal://…your published iCloud calendar…",
+ "publish": {"enabled": true},
+ "issues": {"enabled": true}
+}

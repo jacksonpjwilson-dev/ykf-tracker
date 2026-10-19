@@ -1,0 +1,74 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="robots" content="noindex,nofollow">
+<title>YKF Arrivals</title>
+<style>
+:root{--bg:#0d1117;--card:#161b22;--line:#30363d;--fg:#e6edf3;--mut:#8b949e;--hot:#f0883e;--ok:#3fb950;--blue:#58a6ff}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--fg);font:15px/1.4 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;padding:env(safe-area-inset-top) 12px 24px}
+header{display:flex;align-items:baseline;justify-content:space-between;padding:14px 2px 6px}
+h1{font-size:20px;margin:0}
+.sub{color:var(--mut);font-size:13px}
+.pill{display:inline-block;padding:2px 8px;border-radius:999px;font-size:12px;font-weight:600;border:1px solid var(--line)}
+.pill.on{color:var(--ok);border-color:#238636}.pill.off{color:var(--mut)}
+.meta{color:var(--mut);font-size:12px;margin:2px 2px 12px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:12px 14px;margin-bottom:10px;display:grid;grid-template-columns:1fr auto;gap:2px 10px}
+.card.hot{border-color:var(--hot);box-shadow:0 0 0 1px var(--hot) inset}
+.tail{font-weight:700;font-size:18px;letter-spacing:.3px}
+.type{color:var(--mut);font-size:13px}
+.dist{font-size:22px;font-weight:700;text-align:right}
+.dist small{font-size:12px;color:var(--mut);font-weight:500}
+.row2{grid-column:1/-1;display:flex;flex-wrap:wrap;gap:6px 14px;color:var(--mut);font-size:13px;margin-top:4px}
+.row2 b{color:var(--fg);font-weight:600}
+.st{font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.5px}
+.st.inside{color:var(--hot)}.st.tracking{color:var(--blue)}.st.expected{color:var(--mut)}.st.ground{color:var(--ok)}
+.empty{color:var(--mut);text-align:center;padding:40px 10px;border:1px dashed var(--line);border-radius:12px}
+.stale{color:var(--hot)}
+footer{color:var(--mut);font-size:11px;margin-top:18px;text-align:center}
+</style>
+</head>
+<body>
+<header><h1>YKF Arrivals</h1><span id="state" class="pill off">…</span></header>
+<div class="meta" id="meta">Loading…</div>
+<main id="list"></main>
+<footer>Arrivals within <span id="r">10</span> NM of CYKF. Positions from community ADS-B feeds; may lag or miss aircraft. Refreshes every 15 s.</footer>
+<script>
+const $=s=>document.querySelector(s);
+const fmtTime=s=>{if(!s)return"—";const d=new Date(s);return d.toLocaleTimeString("en-CA",{hour:"2-digit",minute:"2-digit",hour12:false,timeZone:"America/Toronto"})};
+const ago=s=>{if(!s)return"";const x=Math.round((Date.now()-new Date(s))/1000);return x<60?x+" s ago":Math.round(x/60)+" min ago"};
+const esc=s=>String(s??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const cls={"inside 10 NM":"inside","tracking":"tracking","expected":"expected","on ground":"ground","landed?":"ground"};
+const DATA=location.hostname.endsWith("github.io")
+  ?"https://raw.githubusercontent.com/jacksonpjwilson-dev/ykf-tracker/data/live.json"
+  :"data/live.json";
+const dayTime=s=>{const d=new Date(s);return d.toLocaleDateString("en-CA",{weekday:"short",month:"short",day:"numeric",timeZone:"America/Toronto"}).replace(",","")+" "+fmtTime(s)};
+async function load(){
+  try{
+    const r=await fetch(DATA+"?t="+Date.now(),{cache:"no-store"});const d=await r.json();
+    $("#r").textContent=d.radius_nm;
+    const st=$("#state");st.textContent=d.active?"On shift":"Off shift";st.className="pill "+(d.active?"on":"off");
+    const age=(Date.now()-new Date(d.generated))/1000;
+    let m="Updated "+fmtTime(d.generated)+(age>120?' <span class="stale">(stale)</span>':"");
+    if(d.shift)m+=" · Shift "+fmtTime(d.shift.start)+"–"+fmtTime(d.shift.end);
+    if(d.arrivals_updated)m+=" · FlightBridge list "+fmtTime(d.arrivals_updated)+(d.arrivals_stale?' <span class="stale">(old)</span>':"");
+    $("#meta").innerHTML=m;
+    const rows=d.rows||[];
+    if(!d.active){
+      $("#meta").innerHTML="Updated "+dayTime(d.generated);
+      $("#list").innerHTML='<div class="empty">Not on shift — next window '+(d.next_window?dayTime(d.next_window.window_start):"not scheduled")+'</div>';return}
+    if(!rows.length){$("#list").innerHTML='<div class="empty">No arrivals on the list yet.</div>';return}
+    $("#list").innerHTML=rows.map(x=>`<div class="card ${x.status==="inside 10 NM"?"hot":""}">
+      <div><div class="tail">${esc(x.tail)}</div><div class="type">${esc(x.type||"")}${x.note?" · "+esc(x.note):""}</div></div>
+      <div class="dist">${x.dist_nm!=null?esc(Number(x.dist_nm).toFixed(1))+' <small>NM</small>':'<small>not seen</small>'}</div>
+      <div class="row2"><span class="st ${cls[x.status]||""}">${esc(x.status)}</span>
+      <span>Alt <b>${esc(x.alt||"—")}</b></span><span>ETA <b>${esc(x.eta||"none")}</b></span>
+      <span>Last seen <b>${x.last_seen?fmtTime(x.last_seen):"—"}</b> ${esc(ago(x.last_seen))}</span></div></div>`).join("");
+  }catch(e){$("#meta").textContent="Couldn't load data ("+e.message+")"}
+}
+load();setInterval(load,15000);
+</script>
+</body>
+</html>

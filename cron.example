@@ -1,0 +1,5 @@
+# NOT INSTALLED. Example only, pending Jackson's OK.
+# Keep the supervisor alive (the lock makes extra starts exit immediately):
+*/5 * * * * /workspace/ykf-tracker/run-supervisor.sh
+# Weekly CCAR refresh (Sunday 03:15 Ontario; box cron runs in the box's timezone, check `date`):
+15 3 * * 0 cd /workspace/ykf-tracker && python3 -m ykf.run refresh-ccar >> /home/box/shared/ykf-tracker/ccar.log 2>&1
