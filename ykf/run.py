@@ -4,6 +4,7 @@
   python3 -m ykf.run once [--force] [--polls N]   poll now (needs an active window unless --force)
   python3 -m ykf.run supervise             run forever: sleep outside windows, poll every 30 s inside
   python3 -m ykf.run resolve C-GGIB ...    tail -> ICAO hex
+  python3 -m ykf.run shift-watch [--dry-run]   detect Chartright shift changes, wake Cal (cron 15 min)
   python3 -m ykf.run refresh-ccar          download the Transport Canada CCAR (weekly)
 
 Common flags: --shared DIR (redirect arrivals/alerts/state/live, for dry runs),
@@ -299,7 +300,7 @@ def cmd_refresh_ccar(cfg, force=False):
 
 def main(argv=None):
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("cmd", choices=["windows", "once", "supervise", "resolve", "refresh-ccar", "test-issue", "publish-idle"])
+    ap.add_argument("cmd", choices=["windows", "once", "supervise", "resolve", "refresh-ccar", "test-issue", "publish-idle", "shift-watch"])
     ap.add_argument("--dry-run", action="store_true", help="test-issue/once: print the gh command, create nothing")
     ap.add_argument("args", nargs="*")
     ap.add_argument("--shared")
@@ -336,6 +337,13 @@ def main(argv=None):
         tr = Tracker(cfg, online=False)
         doc = tr.write_live(None, t, {"provider": None, "ok": True}, active=False, next_shift=next_window(shifts, t))
         print("published" if (a.dry_run or tr.publish(doc)) else "publish failed", doc["next_window"])
+    elif a.cmd == "shift-watch":
+        from . import shiftwatch
+        kw = {}
+        if a.shared:  # test directory: never touch GitHub
+            kw = dict(gh_open=lambda: None, gh_create=lambda t: None)
+        r = shiftwatch.run(cfg, dry_run=a.dry_run, d=a.shared or shiftwatch.DIR, **kw)
+        print(json.dumps({k: v for k, v in r.items() if k != "diff"}), flush=True)
     elif a.cmd == "refresh-ccar":
         return cmd_refresh_ccar(cfg, a.force)
     return 0

@@ -303,6 +303,91 @@ class SkycareEarly(unittest.TestCase):
         self.assertEqual(sum(len(o) for o in out), 0)
 
 
+def _ics(events):
+    body = "".join("BEGIN:VEVENT\nUID:%s\nDTSTART;TZID=America/Toronto:%s\nDTEND;TZID=America/Toronto:%s\nSUMMARY:%s\nEND:VEVENT\n"
+                   % e for e in events)
+    return ("BEGIN:VCALENDAR\nVERSION:2.0\n" + body + "END:VCALENDAR\n").encode()
+
+
+class ShiftWatch(unittest.TestCase):
+    def setUp(self):
+        from ykf import shiftwatch
+        self.sw = shiftwatch
+        self.tmp = tempfile.mkdtemp()
+        self.now = dt.datetime(2026, 10, 19, 16, 0, tzinfo=TZ)
+        self.base = [("a", "20261019T080000", "20261019T120000", "Chartright"),   # already ended today
+                     ("b", "20261020T150000", "20261021T013000", "Chartright"),
+                     ("c", "20261021T080000", "20261021T183000", "Chartright"),
+                     ("d", "20261022T033000", "20261022T140000", "Chartright"),
+                     ("e", "20261021T180000", "20261021T210000", "EA shift")]
+        self.created = []
+        self.open_num = None
+
+    def go(self, events, now=None, dry=False):
+        return self.sw.run(CFG, dry_run=dry, d=self.tmp, ics=_ics(events), now=now or self.now,
+                           gh_open=lambda: self.open_num, gh_create=lambda t: (self.created.append(t) or 41))
+
+    def test_seed_then_no_change(self):
+        r = self.go(self.base)
+        self.assertEqual(r["result"], "seeded")
+        self.assertEqual(r["upcoming"], 3)  # EA ignored, ended shift not upcoming
+        self.assertEqual(self.go(self.base)["result"], "no-change")
+        self.assertEqual(self.created, [])
+
+    def test_added_removed_moved(self):
+        self.go(self.base)
+        ev = [x for x in self.base if x[0] != "d"]                         # removed d
+        ev = [("c", "20261021T090000", "20261021T183000", "Chartright") if x[0] == "c" else x for x in ev]  # moved c
+        ev.append(("f", "20261024T050000", "20261024T153000", "Chartright"))  # added f
+        r = self.go(ev)
+        self.assertEqual(r["result"], "changed")
+        self.assertEqual([x["uid"] for x in r["diff"]["added"]], ["f"])
+        self.assertEqual([x["uid"] for x in r["diff"]["removed"]], ["d"])
+        self.assertEqual(r["diff"]["changed"][0]["after"]["start"], "2026-10-21T09:00:00-04:00")
+        self.assertEqual(len(self.created), 1)
+        doc = json.load(open(os.path.join(self.tmp, "change.json")))
+        self.assertEqual(doc["issue"], 41)
+        self.assertEqual(len(doc["events"]), 1)
+        # nothing new on the next run
+        self.assertEqual(self.go(ev)["result"], "no-change")
+
+    def test_past_drop_ignored(self):
+        self.go(self.base)
+        later = dt.datetime(2026, 10, 22, 15, 0, tzinfo=TZ)  # b, c, d all ended
+        ev = [x for x in self.base if x[0] not in ("a", "b")]  # calendar drops old events
+        ev.append(("g", "20261030T033000", "20261030T140000", "Chartright"))
+        self.assertEqual(self.go(ev, now=later)["result"], "changed")  # g is new
+        r = self.go([x for x in ev if x[0] != "c"], now=later)  # c ended: dropping it is not a change
+        self.assertEqual(r["result"], "no-change")
+
+    def test_open_issue_dedupes_and_appends(self):
+        self.go(self.base)
+        self.go(self.base + [("f", "20261024T050000", "20261024T153000", "Chartright")])
+        self.open_num = 41  # Cal hasn't closed it yet
+        r = self.go(self.base + [("f", "20261024T060000", "20261024T153000", "Chartright")])
+        self.assertEqual(r["result"], "changed")
+        self.assertFalse(r["created"])
+        self.assertEqual(len(self.created), 1)
+        doc = json.load(open(os.path.join(self.tmp, "change.json")))
+        self.assertEqual(len(doc["events"]), 2)
+
+    def test_fetch_failure_and_suspicious_empty(self):
+        self.go(self.base)
+        r = self.sw.run(CFG, d=self.tmp, ics=b"garbage", now=self.now, gh_open=lambda: None, gh_create=lambda t: 1 / 0)
+        self.assertEqual(r["result"], "fetch-failed")
+        self.assertEqual(self.go([])["result"], "suspicious-empty")
+        self.assertEqual(self.created, [])
+
+    def test_dry_run_writes_nothing(self):
+        self.go(self.base)
+        before = open(os.path.join(self.tmp, "last.json")).read()
+        r = self.go(self.base[:3], dry=True)
+        self.assertEqual(r["result"], "dry-run-change")
+        self.assertEqual(open(os.path.join(self.tmp, "last.json")).read(), before)
+        self.assertFalse(os.path.exists(os.path.join(self.tmp, "change.json")))
+        self.assertEqual(self.created, [])
+
+
 class Issues(unittest.TestCase):
     def test_batch_title_and_public_body(self):
         from ykf import github as gh

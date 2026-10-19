@@ -77,7 +77,7 @@ def parse_shifts(ics_bytes, cfg, start=None, end=None):
             continue
         seen.add(sid)
         out.append({"id": sid, "start": s, "end": en, "win_start": s - pre, "win_end": en,
-                    "summary": summary})
+                    "summary": summary, "uid": str(e.get("UID", "")) or sid})
     out.sort(key=lambda x: x["start"])
     return out
 

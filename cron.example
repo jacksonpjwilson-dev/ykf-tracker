@@ -1,3 +1,4 @@
 # Installed in box's crontab (box timezone is America/Toronto).
 */5 * * * * /workspace/ykf-tracker/run-supervisor.sh
 15 3 * * 0 cd /workspace/ykf-tracker && /usr/bin/python3 -m ykf.run refresh-ccar >> /home/box/shared/ykf-tracker/ccar.log 2>&1
+*/15 * * * * cd /workspace/ykf-tracker && PATH=/usr/local/bin:/usr/bin:/bin /usr/bin/python3 -m ykf.run shift-watch >> /home/box/shared/shift-watch/cron.out 2>&1

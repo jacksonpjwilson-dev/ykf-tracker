@@ -85,3 +85,17 @@ This applies to unscheduled Skycare only (hex or registration in the fleet list,
 - **Per shift window** (about 11 h, from 30 min before start to the end): 1,320 point calls + 330 fleet calls = **about 1,650 calls**. The busiest calendar day (for example Oct 21: 00:00–01:30 plus 07:30–18:30) is about 1,875.
 - **How it's split:** adsb.lol is capped at 450 calls a day (its header says `500;w=86400`). The rest go to adsb.fi, about 1,200–1,400 a shift, at most 1 call per second. That's within adsb.fi's published 1 req/s limit; it publishes no daily cap. airplanes.live is skipped while it returns 403.
 - **Outside windows:** zero calls.
+
+## Shift watcher (wakes Cal)
+`python3 -m ykf.run shift-watch` runs from cron every 15 min, separately from the tracker loop. The code is in `ykf/shiftwatch.py`.
+- **Fetch:** it reads the Chartright calendar (the URL comes from the gitignored `config/config.json`). A good fetch also refreshes `cache/chartright.ics`, so the tracker supervisor picks up new windows within about 10 more minutes.
+- **Compare:** it takes the shifts from today onward, `{uid, start, end}`, and compares them by event UID with `/home/box/shared/shift-watch/last.json`, sorting them into added, removed and moved.
+- **Ignored:** shifts that have already ended dropping off.
+- **On a change:**
+  - It writes `/home/box/shared/shift-watch/change.json`. This is box-only and holds the full details, `events[]`, plus `current_shifts`.
+  - It opens ONE issue in `jacksonpjwilson-dev/schedule` with the label `schedule-change`, assigned to jacksonpjwilson-dev, titled `Shifts changed HH:MM`. The body has no shift details.
+  - If a `schedule-change` issue is already open, it only appends to change.json.
+- **First run:** it seeds last.json and opens no issue.
+- **Fetch or parse failure:** it's logged to `watch.log`, and nothing else happens.
+- **Suddenly empty calendar:** if the calendar has no upcoming shifts but there were 3 or more before, that's treated as a bad fetch.
+- **Dry runs:** `--dry-run` writes nothing. `--shared DIR` uses a test directory and never touches GitHub.
