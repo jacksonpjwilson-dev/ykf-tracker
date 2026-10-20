@@ -278,12 +278,95 @@ class MissedArrival(unittest.TestCase):
     def test_eta_near_not_seen(self):
         st = {}
         a = []
-        t = self.at("19:10:00")
-        for i in range(0, 30):
+        t = self.at("19:00:00")
+        for i in range(0, 40):
             a += self.poll(st, t + dt.timedelta(seconds=30 * i), [])
         self.assertEqual([x["alert_type"] for x in a], ["eta-no-contact"])
-        self.assertEqual(a[0]["time"], "19:20")
-        self.assertIn("C-GFLZ B300 due 19:30 at YKF, no 10 NM alert yet (not seen on ADS-B yet)", a[0]["text"])
+        self.assertEqual(a[0]["time"], "19:10")  # never seen: 20 min heads-up
+        self.assertEqual(a[0]["text"], "C-GFLZ B300 due 19:30 at YKF, ETA-based only, not visible on ADS-B")
+        self.assertEqual(a[0]["basis"], "eta-only")
+
+    def test_eta_seen_then_lost_fires_15_min_before(self):
+        st = {}
+        self.poll(st, self.at("18:40:00"), [_gflz(43.296654, -79.811881, 9000, 225, 241, 0)])
+        a = []
+        for i in range(1, 80):
+            a += self.poll(st, self.at("18:40:00") + dt.timedelta(seconds=30 * i), [])
+        kinds = [(x["alert_type"], x["time"]) for x in a]
+        self.assertEqual(kinds, [("contact-lost", "18:45")])  # one alert: lost covers the ETA warning
+        # seen far out (beyond lost_inbound_nm), then nothing: ETA warning 15 min before
+        st, a = {}, []
+        far = _gflz(44.2, -78.9, 15000, 250, 241, 0)  # ~78 NM
+        self.poll(st, self.at("18:40:00"), [far])
+        for i in range(1, 80):
+            a += self.poll(st, self.at("18:40:00") + dt.timedelta(seconds=30 * i), [])
+        self.assertEqual([(x["alert_type"], x["time"]) for x in a], [("eta-no-contact", "19:15")])
+        self.assertIn("due 19:30 at YKF, no 10 NM alert yet, last seen 18:40, 78 NM out", a[0]["text"])
+        self.assertEqual(a[0]["basis"], "last-position")
+
+    def test_eta_visible_inbound_outside_10nm_no_eta_alert(self):
+        st = {}
+        a = []
+        for i in range(0, 40):  # on time, visible at ~30 NM all along the warn window
+            a += self.poll(st, self.at("19:00:00") + dt.timedelta(seconds=30 * i),
+                           [_gflz(43.296654, -79.811881, 9000, 225, 241, 0)])
+        self.assertEqual(a, [])
+
+    def test_late_add_with_past_eta_no_alert(self):
+        """2026-10-20: C-GQBF appeared in arrivals.json at 18:37 with ETA 17:36, and
+        C-GFLZ's ETA was moved from 19:30 to 18:20 at the same write. Issue #3 then
+        reported both as 'no 10 NM alert yet' after they were on the ramp."""
+        r = Resolver("/tmp/ykf-test-regs.json", None)
+        st = {}
+        w1 = build_watch([{"tail": "CGFLZ", "type": "B300", "eta": "19:30"}], r, online=False)
+        safety_net(st, self.sh, w1, self.at("18:31:40"), CFG)
+        w2 = build_watch([{"tail": "CGQBF", "type": "Canadair CL-415", "eta": "17:36"},
+                          {"tail": "CGFLZ", "type": "B300", "eta": "18:20"}], r, online=False)
+        a = []
+        for i in range(0, 20):
+            a += safety_net(st, self.sh, w2, self.at("18:38:11") + dt.timedelta(seconds=30 * i), CFG)
+        self.assertEqual(a, [])
+        sn = st["shifts"][self.sh["id"]]["safety"]
+        self.assertTrue(sn["CGQBF"]["late_add"] and sn["CGFLZ"]["late_add"])
+        # an ETA that is moved LATER (delay) re-arms the warning
+        w3 = build_watch([{"tail": "CGQBF", "type": "Canadair CL-415", "eta": "19:05"}], r, online=False)
+        a = safety_net(st, self.sh, w3, self.at("18:50:00"), CFG)
+        self.assertEqual([x["alert_type"] for x in a], ["eta-no-contact"])
+
+    def test_no_adsb_flag_says_eta_only(self):
+        from ykf.core import load_arrivals
+        r = Resolver("/tmp/ykf-test-regs.json", None)
+        with tempfile.TemporaryDirectory() as d:
+            p = os.path.join(d, "arrivals.json")
+            json.dump({"updated": "2026-10-20T15:00:00-04:00", "arrivals": [
+                {"tail": "C-GQBF", "type": "CL-415", "eta": "17:36", "adsb": False}]}, open(p, "w"))
+            doc, _ = load_arrivals(p)
+        self.assertIs(doc["arrivals"][0]["adsb"], False)
+        w = build_watch(doc["arrivals"], r, online=False)
+        st, a = {}, []
+        for i in range(0, 40):
+            a += safety_net(st, self.sh, w, self.at("17:00:00") + dt.timedelta(seconds=30 * i), CFG)
+        self.assertEqual([(x["time"], x["text"]) for x in a],
+                         [("17:16", "C-GQBF CL-415 due 17:36 at YKF, ETA-based only, this aircraft doesn't broadcast ADS-B")])
+        # same via config list
+        w = build_watch([{"tail": "CGQBF", "type": "CL-415", "eta": "17:36"}], r, online=False)
+        a = safety_net({}, self.sh, w, self.at("17:16:00"), dict(CFG, no_adsb_tails=["C-GQBF"]))
+        self.assertIn("doesn't broadcast ADS-B", a[0]["text"])
+        self.assertFalse(a[0]["adsb_visible"])
+
+    def test_catchup_stops_for_long_lost_track(self):
+        from ykf import run as R
+        with tempfile.TemporaryDirectory() as d:
+            cfg = config.load(shared=d)
+            tr = R.Tracker(cfg, online=False)
+            tr.watch = self.watch
+            st = tr.state
+            self.climb_leg(st)
+            sh = st["shifts"][self.sh["id"]]
+            sh["last_poll"] = "2026-10-20T18:20:00-04:00"  # no gap
+            self.assertTrue(tr._needs_catchup(self.sh, self.at("18:20:30")))
+            sh["last_poll"] = "2026-10-20T18:45:00-04:00"
+            self.assertFalse(tr._needs_catchup(self.sh, self.at("18:45:30")))  # 38 min since last seen
 
     def test_eta_no_alert_if_already_alerted(self):
         st = {}

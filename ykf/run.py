@@ -121,7 +121,8 @@ class Tracker:
             tr = (sh.get("tracks") or {}).get(tail)
             if tail in sh.get("alerted", {}) or not tr or tr.get("ground"):
                 continue
-            if t.timestamp() - parse_iso(tr["last_seen"]).timestamp() >= self.cfg["lost_after_s"] / 2 \
+            age = t.timestamp() - parse_iso(tr["last_seen"]).timestamp()
+            if self.cfg["lost_after_s"] / 2 <= age <= self.cfg["catchup_max_s"] \
                     and tr["dist_nm"] <= self.cfg["lost_inbound_nm"]:
                 return True
         return False
@@ -188,6 +189,12 @@ class Tracker:
         if provider:
             alerts += step(ac, self.watch, self.sky, self.state, shift, t, self.cfg)
             alerts += safety_net(self.state, shift, self.watch, t, self.cfg)
+        sn = (self.state.get("shifts", {}).get(shift["id"]) or {}).get("safety", {})
+        for tail, d in sn.items():
+            if d.get("late_add") and not d.get("late_logged"):
+                d["late_logged"] = True
+                log(self.cfg, "late add: %s listed with ETA %s already past, no ETA alert (10 NM alert still armed)" % (
+                    tail, d.get("eta_v")))
         for a in alerts:  # pending files first: always written, even if GitHub is down
             atomic_json(os.path.join(self.cfg["paths"]["alerts_pending"], a["id"] + ".json"), a)
             log(self.cfg, "ALERT %s" % a["text"])

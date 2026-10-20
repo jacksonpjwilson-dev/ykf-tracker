@@ -34,7 +34,10 @@ def load_arrivals(path):
         if eta is not None and not re.fullmatch(r"([01]\d|2[0-3]):[0-5]\d", str(eta)):
             problems.append("%s: bad eta %r, treated as no ETA" % (tail, eta))
             eta = None
-        arrivals.append({"tail": tail, "type": (a.get("type") or "").strip(), "eta": eta})
+        e = {"tail": tail, "type": (a.get("type") or "").strip(), "eta": eta}
+        if a.get("adsb") is False:  # optional: aircraft known not to broadcast ADS-B
+            e["adsb"] = False
+        arrivals.append(e)
     doc["arrivals"] = arrivals
     return doc, problems
 
@@ -310,6 +313,14 @@ def scheduled_inbound(ac, prev):
     return pd is not None and ac["dist"] < pd - 0.2
 
 
+def adsb_expected(tail, w, cfg):
+    """False when the arrival is flagged as not broadcasting ADS-B, either per
+    arrival ("adsb": false in arrivals.json) or by tail in config no_adsb_tails."""
+    if w.get("adsb") is False:
+        return False
+    return norm_tail(tail) not in {norm_tail(t) for t in cfg.get("no_adsb_tails", [])}
+
+
 def eta_datetime(shift, eta):
     """'19:30' -> aware datetime inside this shift (handles shifts past midnight)."""
     if not eta:
@@ -344,7 +355,10 @@ def safety_net(state, shift, watch, now, cfg):
                         close or due during/just after the gap
       contact-lost      last seen airborne, heading in, within lost_inbound_nm,
                         and no position for lost_after_s
-      eta-no-contact    within eta_warn_min of ETA and not seen inside 10 NM
+      eta-no-contact    not visible on ADS-B right now and the ETA is within
+                        eta_warn_min (seen earlier) or eta_warn_noadsb_min (never
+                        seen / flagged no-ADS-B). Skipped for late adds whose ETA
+                        had already passed when FlightBridge listed them.
     """
     sh = state.setdefault("shifts", {}).setdefault(shift["id"], {"alerted": {}, "tracks": {}})
     sn = sh.setdefault("safety", {})
@@ -391,15 +405,38 @@ def safety_net(state, shift, watch, now, cfg):
                 alerts.append(_safety_alert("contact-lost", tail, w, now, shift, text, tr))
                 continue
         eta = eta_datetime(shift, w.get("eta"))
-        if eta and not done.get("eta") and not done.get("gap"):
-            lead = (eta - now).total_seconds() / 60.0
-            fresh_inside = tr and now.timestamp() - _ts(tr["last_seen"]) < cfg["lost_after_s"] \
-                and tr["dist_nm"] <= cfg["alert_radius_nm"]
-            if -120 <= lead <= cfg["eta_warn_min"] and not fresh_inside:
-                done["eta"] = iso(now)
-                seen = ("last seen %s, %.0f NM out" % (hhmm(_dt(tr["last_seen"])), tr["dist_nm"])) if tr else "not seen on ADS-B yet"
-                text = "%s due %s at %s, no 10 NM alert yet (%s)" % (name, w["eta"], short, seen)
-                alerts.append(_safety_alert("eta-no-contact", tail, w, now, shift, text, tr))
+        if not eta or done.get("eta") or done.get("gap") or done.get("lost"):
+            continue
+        # When did we first learn this ETA? A tail added (or an ETA moved) after
+        # the ETA had already passed is a FlightBridge catch-up, not an arrival
+        # we can still warn about (2026-10-20: C-GQBF listed at 18:37, ETA 17:36).
+        if done.get("eta_v") != w["eta"]:
+            done["eta_v"], done["eta_listed"] = w["eta"], iso(now)
+            done.pop("late_add", None)
+        listed = _dt(done["eta_listed"])
+        if eta < listed - dt.timedelta(minutes=cfg["eta_late_grace_min"]):
+            done["late_add"] = done.get("late_add") or iso(now)
+            continue
+        fresh = tr and now.timestamp() - _ts(tr["last_seen"]) < cfg["lost_after_s"]
+        if fresh:
+            continue  # visible right now: the 10 NM / landed alerts cover it
+        no_adsb = not adsb_expected(tail, w, cfg)
+        warn = cfg["eta_warn_noadsb_min"] if (no_adsb or not tr) else cfg["eta_warn_min"]
+        lead = (eta - now).total_seconds() / 60.0
+        if not (-cfg["eta_late_grace_min"] <= lead <= warn):
+            continue
+        done["eta"] = iso(now)
+        if no_adsb:
+            why = "ETA-based only, this aircraft doesn't broadcast ADS-B"
+        elif tr:
+            why = "no 10 NM alert yet, last seen %s, %.0f NM out" % (hhmm(_dt(tr["last_seen"])), tr["dist_nm"])
+        else:
+            why = "ETA-based only, not visible on ADS-B"
+        text = "%s due %s at %s, %s" % (name, w["eta"], short, why)
+        a = _safety_alert("eta-no-contact", tail, w, now, shift, text, tr)
+        a["basis"] = "eta-only" if (no_adsb or not tr) else "last-position"
+        a["adsb_visible"] = bool(tr) and not no_adsb
+        alerts.append(a)
     return alerts
 
 

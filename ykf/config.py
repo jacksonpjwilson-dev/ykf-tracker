@@ -53,7 +53,11 @@ DEFAULTS = {
     "gap_recent_s": 600,         # how long after a gap a ground sighting at the field still counts as missed
     "landed_nm": 3,              # 'on the ground at the field'
     "lost_inbound_nm": 40,       # contact lost while heading in within this range -> alert
-    "eta_warn_min": 10,          # scheduled arrival due within this many minutes, not seen inside 10 NM -> alert
+    "eta_warn_min": 15,          # seen earlier but lost: alert this many minutes before ETA
+    "eta_warn_noadsb_min": 20,   # never seen / flagged no-ADS-B: ETA-based heads-up this early
+    "eta_late_grace_min": 10,    # ETA already this far past when first listed -> late add, no ETA alert
+    "no_adsb_tails": [],         # tails known not to broadcast ADS-B (or "adsb": false in arrivals.json)
+    "catchup_max_s": 1800,       # stop all-provider catch-up for a track not seen for this long
     "feed_stale_alert_s": 300,   # every feed failing this long -> tracker-health alert
     "catchup_every_s": 60,       # extra all-provider hex lookup for watched tails when one is lost/after a gap
     "feed_timeout_s": 10,        # per socket operation
