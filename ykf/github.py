@@ -16,6 +16,9 @@ def _run(cmd, cwd=None, inp=None, timeout=90):
     return r.stdout
 
 
+FSWRITE = "/workspace/fullapp-shared/firestore-writer/fswrite.py"
+
+
 def publish_live(cfg, doc):
     """Force-push live.json as the only commit on the data branch."""
     p = cfg["publish"]
@@ -26,6 +29,12 @@ def publish_live(cfg, doc):
         json.dump(doc, f, indent=1, default=str)
     with open(os.path.join(d, "README.md"), "w") as f:
         f.write("Machine-written live data for the YKF arrivals page. Force-pushed as a single commit; no history.\n")
+    # Private copy for the owner-only page: Firestore ykf/live via the bot-writer key. Non-fatal by design.
+    try:
+        subprocess.run(["python3", FSWRITE, "ykf", os.path.join(d, "live.json")], timeout=60, check=False,
+                       stdout=subprocess.DEVNULL)
+    except Exception:
+        pass
     g = ["git", "-c", "user.name=" + p["git_name"], "-c", "user.email=" + p["git_email"]]
     _run(["git", "init", "-q", "-b", p["branch"]], cwd=d)
     _run(["git", "add", "-A"], cwd=d)
