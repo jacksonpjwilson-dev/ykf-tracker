@@ -7,7 +7,7 @@ import unittest
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from ykf import config
-from ykf.core import alert_text, build_watch, live_rows, load_skycare, skycare_inbound, step, norm_aircraft
+from ykf.core import alert_text, build_watch, live_rows, load_skycare, safety_net, skycare_inbound, step, norm_aircraft
 from ykf.geo import distance_nm, bearing_deg, angle_diff
 from ykf.regs import canada_hex, us_hex, norm_tail, pretty_tail, Resolver
 from ykf.shifts import parse_shifts, current_window, https_url
@@ -112,8 +112,13 @@ class Logic(unittest.TestCase):
         self.assertEqual(a, [])
         rows = live_rows(st, shift(), self.watch, self.t, CFG)
         row = [r for r in rows if r["tail"] == "C-FABC"][0]
-        self.assertEqual(row["status"], "tracking")
+        self.assertEqual(row["status"], "inbound, 10 NM")  # pointed at the field
         self.assertEqual(row["eta"], "16:10")
+        st = {}
+        away = ac_at(10.4, 0, hex=canada_hex("CFABC"), track=0, baro_rate=1500)
+        self.assertEqual(step([away], self.watch, self.sky, st, shift(), self.t, CFG), [])
+        row = [r for r in live_rows(st, shift(), self.watch, self.t, CFG) if r["tail"] == "C-FABC"][0]
+        self.assertEqual(row["status"], "tracking")
 
     def test_eta_in_text_and_match_by_callsign_only(self):
         st = {}
@@ -176,6 +181,212 @@ class Logic(unittest.TestCase):
             self.assertTrue(set(r) <= allowed, set(r) - allowed)
         self.assertNotIn("Skycare", json.dumps(rows))
         self.assertNotIn("Owner", json.dumps(rows))
+
+
+def _gflz(lat, lon, alt, gs, trk, rate):
+    """Real C-GFLZ positions from the public adsb.fi / airplanes.live traces, 2026-10-20."""
+    return {"hex": "c05314", "r": "C-GFLZ", "t": "B350", "lat": lat, "lon": lon, "alt_baro": alt,
+            "gs": gs, "track": trk, "baro_rate": rate}
+
+
+class MissedArrival(unittest.TestCase):
+    """Incident 2026-10-20: C-GFLZ (B300, ETA 19:30) landed CYKF ~18:20 with no alert.
+    Box paused 18:08-18:22, so no poll ran while it crossed 10 NM; first poll after
+    resume saw it (if at all) on the ground."""
+
+    def setUp(self):
+        self.sky = load_skycare(os.path.join(ROOT, "config", "skycare.json"))
+        r = Resolver("/tmp/ykf-test-regs.json", None)
+        self.watch = build_watch([{"tail": "CGFLZ", "type": "B300", "eta": "19:30"}], r, online=False)
+        self.sh = shift()
+
+    def at(self, hhmmss):
+        h, m, s_ = map(int, hhmmss.split(":"))
+        return dt.datetime(2026, 10, 20, h, m, s_, tzinfo=TZ)
+
+    def poll(self, st, t, feed):
+        return step(feed, self.watch, self.sky, st, self.sh, t, CFG) + safety_net(st, self.sh, self.watch, t, CFG)
+
+    def climb_leg(self, st):
+        a = self.poll(st, self.at("18:06:15"), [_gflz(43.338913, -79.707855, 3350, 231.8, 241.1, 1184)])
+        a += self.poll(st, self.at("18:07:37"), [_gflz(43.296654, -79.811881, 5300, 225.1, 241.0, 1472)])
+        return a
+
+    def test_climb_toward_field_counts_as_inbound(self):
+        st = {}
+        self.assertEqual(self.climb_leg(st), [])  # 26.6 NM, too far for an alert
+        tr = st["shifts"][self.sh["id"]]["tracks"]["CGFLZ"]
+        self.assertTrue(tr["inbound"])
+        self.assertEqual(tr["rate_fpm"], 1472)
+        row = live_rows(st, self.sh, self.watch, self.at("18:07:40"), CFG)[0]
+        self.assertTrue(row["status"].startswith("inbound"))
+
+    def test_climbing_inside_radius_toward_field_still_alerts(self):
+        st = {}
+        a = self.poll(st, self.at("18:12:30"), [_gflz(43.335571, -80.25353, 5550, 263.5, 266.3, 1472)])
+        self.assertEqual([x["alert_type"] for x in a], ["near-10nm"])
+
+    def test_no_gap_normal_alert(self):
+        st = {}
+        self.climb_leg(st)
+        a = self.poll(st, self.at("18:08:07"), [_gflz(43.29, -79.83, 5575, 246, 243, 0)])
+        a += self.poll(st, self.at("18:12:30"), [_gflz(43.335571, -80.25353, 5550, 263.5, 266.3, -160)])
+        self.assertEqual([x["alert_type"] for x in a], ["near-10nm"])
+
+    def test_gap_then_on_ground_fires_landed(self):
+        st = {}
+        self.climb_leg(st)
+        a = self.poll(st, self.at("18:22:42"), [_gflz(43.458389, -80.38444, "ground", 12.8, 295.3, None)])
+        kinds = sorted(x["alert_type"] for x in a)
+        self.assertEqual(kinds, ["landed-unalerted"])  # landed marks it alerted; no extra gap noise
+        self.assertIn("on the ground at YKF", a[0]["text"])
+        self.assertIn("blind 15 min, 18:07 to 18:22", a[0]["text"])
+        # never again this shift
+        self.assertEqual(self.poll(st, self.at("18:23:12"), [_gflz(43.4586, -80.3848, "ground", 14, 309, None)]), [])
+
+    def test_gap_and_aircraft_not_on_feed_fires_gap_alert_once(self):
+        st = {}
+        self.climb_leg(st)
+        a = self.poll(st, self.at("18:22:42"), [])
+        self.assertEqual([x["alert_type"] for x in a], ["tracker-gap"])
+        self.assertIn("blind 15 min (18:07 to 18:22)", a[0]["text"])
+        self.assertIn("C-GFLZ ETA 19:30, last seen 18:07 27 NM out", a[0]["text"])
+        # no contact-lost or eta duplicate for the same arrival afterwards
+        for i in range(1, 200):
+            self.assertEqual(self.poll(st, self.at("18:22:42") + dt.timedelta(seconds=30 * i), []), [])
+
+    def test_contact_lost_without_gap(self):
+        st = {}
+        self.climb_leg(st)
+        a = []
+        t = self.at("18:07:37")
+        for i in range(1, 12):  # polls keep running, aircraft just vanishes from the feed
+            a += self.poll(st, t + dt.timedelta(seconds=30 * i), [])
+        self.assertEqual([x["alert_type"] for x in a], ["contact-lost"])
+        self.assertIn("lost signal 27 NM from YKF at 5,300 ft, heading in (last seen 18:07), ETA 19:30", a[0]["text"])
+
+    def test_departing_outbound_loss_does_not_alert(self):
+        st = {}
+        away = _gflz(43.30, -79.81, 5300, 225, 61, 1472)  # same spot, flying away from CYKF
+        self.poll(st, self.at("18:07:37"), [away])
+        self.poll(st, self.at("18:08:07"), [_gflz(43.32, -79.75, 5800, 225, 61, 1400)])
+        a = []
+        for i in range(1, 12):
+            a += self.poll(st, self.at("18:08:07") + dt.timedelta(seconds=30 * i), [])
+        self.assertEqual(a, [])
+
+    def test_eta_near_not_seen(self):
+        st = {}
+        a = []
+        t = self.at("19:10:00")
+        for i in range(0, 30):
+            a += self.poll(st, t + dt.timedelta(seconds=30 * i), [])
+        self.assertEqual([x["alert_type"] for x in a], ["eta-no-contact"])
+        self.assertEqual(a[0]["time"], "19:20")
+        self.assertIn("C-GFLZ B300 due 19:30 at YKF, no 10 NM alert yet (not seen on ADS-B yet)", a[0]["text"])
+
+    def test_eta_no_alert_if_already_alerted(self):
+        st = {}
+        self.poll(st, self.at("19:15:00"), [_gflz(43.335571, -80.25353, 5550, 263.5, 266.3, -160)])
+        self.assertEqual(self.poll(st, self.at("19:25:00"), []), [])
+
+    def test_parked_at_field_at_shift_start_no_alert(self):
+        st = {}
+        a = self.poll(st, self.at("15:00:00"), [_gflz(43.4596, -80.3980, "ground", 0, 64, None)])
+        a += self.poll(st, self.at("15:00:30"), [_gflz(43.4596, -80.3980, "ground", 0, 64, None)])
+        self.assertEqual(a, [])
+
+    def test_eta_datetime_past_midnight(self):
+        from ykf.core import eta_datetime
+        sh = shift("2026-10-20T15:00")
+        self.assertEqual(eta_datetime(sh, "19:30").isoformat(), "2026-10-20T19:30:00-04:00")
+        self.assertEqual(eta_datetime(sh, "00:45").isoformat(), "2026-10-21T00:45:00-04:00")
+        self.assertEqual(eta_datetime(sh, "14:50").isoformat(), "2026-10-20T14:50:00-04:00")
+
+
+class FeedsRobust(unittest.TestCase):
+    def test_403_falls_back_and_total_timeout(self):
+        import urllib.error
+        from ykf import feeds as F
+        calls = []
+
+        class Resp:
+            headers = {}
+            def __init__(self, body): self.body = body
+            def __enter__(self): return self
+            def __exit__(self, *a): return False
+            def read(self, n=-1):
+                b, self.body = self.body, b""
+                return b
+
+        def fake_urlopen(req, timeout=None):
+            calls.append((req.full_url, timeout))
+            if "airplanes.live" in req.full_url:
+                raise urllib.error.HTTPError(req.full_url, 403, "Forbidden", {}, None)
+            return Resp(b'{"ac": [{"hex": "c05314"}], "now": 1792534000000}')
+
+        real = F.urllib.request.urlopen
+        F.urllib.request.urlopen = fake_urlopen
+        try:
+            st = {}
+            fd = F.Feeds(dict(CFG, providers=["airplanes.live", "adsb.lol", "adsb.fi"]), st)
+            name, _, ac = fd.fetch()
+            self.assertEqual(name, "adsb.lol")
+            self.assertEqual(st["providers"]["airplanes.live"]["last_error"], "HTTP 403")
+            self.assertIn("airplanes.live: HTTP 403", fd.last_errors)
+            self.assertEqual(calls[0][1], CFG["feed_timeout_s"])
+            # second call skips the 403 provider without hitting it
+            n0 = len(calls)
+            fd.fetch()
+            self.assertEqual(len(calls), n0 + 1)
+            # all-provider hex lookup merges what any feed sees
+            got = fd.fetch_hexes_all(["c05314"])
+            self.assertEqual([a["hex"] for a in got], ["c05314"])
+        finally:
+            F.urllib.request.urlopen = real
+
+    def test_slow_drip_response_is_cut_off(self):
+        from ykf import feeds as F
+        import time as _t
+
+        class Drip:
+            headers = {}
+            def __enter__(self): return self
+            def __exit__(self, *a): return False
+            def read(self, n=-1):
+                _t.sleep(0.3)
+                return b" "
+
+        real = F.urllib.request.urlopen
+        F.urllib.request.urlopen = lambda req, timeout=None: Drip()
+        try:
+            fd = F.Feeds(dict(CFG, providers=["adsb.fi"], feed_total_timeout_s=1), {})
+            t0 = _t.monotonic()
+            with self.assertRaises(F.FeedError):
+                fd.fetch()
+            self.assertLess(_t.monotonic() - t0, 3)
+        finally:
+            F.urllib.request.urlopen = real
+
+
+class Watchdog(unittest.TestCase):
+    def test_feed_down_alerts_once_then_recovers(self):
+        from ykf import run as R
+        with tempfile.TemporaryDirectory() as d:
+            cfg = config.load(shared=d)
+            cfg = dict(cfg, publish=dict(cfg["publish"], enabled=False), issues=dict(cfg["issues"], enabled=False))
+            tr = R.Tracker(cfg, online=False)
+            sh = shift()
+            t = dt.datetime(2026, 10, 20, 18, 10, tzinfo=TZ)
+            tr.feed_ok_ts -= 200
+            self.assertEqual(tr.feed_watchdog(sh, t, False, "x"), [])
+            tr.feed_ok_ts -= 200
+            a = tr.feed_watchdog(sh, t, False, "adsb.lol: timed out")
+            self.assertEqual([x["alert_type"] for x in a], ["tracker-health"])
+            self.assertIn("no ADS-B data for 7 min", a[0]["text"])
+            self.assertEqual(tr.feed_watchdog(sh, t, False, "x"), [])
+            self.assertEqual(tr.feed_watchdog(sh, t, True), [])
+            self.assertFalse(tr.feed_down_alerted)
 
 
 class SkycareEarly(unittest.TestCase):

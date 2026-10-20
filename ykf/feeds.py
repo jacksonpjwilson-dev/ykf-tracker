@@ -28,6 +28,7 @@ class Feeds:
         self.cfg = cfg
         self.state = state  # dict persisted by caller: {"providers": {...}}
         self.last_call = {}
+        self.last_errors = []
 
     def _pstate(self, name):
         ps = self.state.setdefault("providers", {}).setdefault(name, {})
@@ -39,8 +40,17 @@ class Feeds:
     def _get(self, url):
         req = urllib.request.Request(url, headers={"User-Agent": self.cfg["user_agent"],
                                                    "Accept": "application/json", "Accept-Encoding": "gzip"})
-        with urllib.request.urlopen(req, timeout=25) as r:
-            raw = r.read()
+        deadline = time.monotonic() + self.cfg.get("feed_total_timeout_s", 30)
+        with urllib.request.urlopen(req, timeout=self.cfg.get("feed_timeout_s", 10)) as r:
+            chunks = []
+            while True:  # bounded total time, not just per-read
+                if time.monotonic() > deadline:
+                    raise TimeoutError("read took over %ss" % self.cfg.get("feed_total_timeout_s", 30))
+                b = r.read(65536)
+                if not b:
+                    break
+                chunks.append(b)
+            raw = b"".join(chunks)
             if r.headers.get("Content-Encoding") == "gzip":
                 import gzip
                 raw = gzip.decompress(raw)
@@ -51,11 +61,33 @@ class Feeds:
         hx = ",".join(sorted(h for h in hexes if h))
         return self.fetch(url_for=lambda name: HEX_URLS[name].format(hexes=hx))
 
-    def fetch(self, url_for=None):
+    def fetch_hexes_all(self, hexes):
+        """Ask EVERY usable provider for these hexes and merge, freshest position
+        per hex. Used for watched arrivals after a gap or a lost contact: coverage
+        differs between networks, especially low and on the ground (adsb.lol had
+        no C-GFLZ on the ground at CYKF on 2026-10-20 while adsb.fi did)."""
+        hx = ",".join(sorted(h for h in hexes if h))
+        if not hx:
+            return []
+        best = {}
+        for name in self.cfg["providers"]:
+            try:
+                _, _, ac = self.fetch(url_for=lambda n, name=name: HEX_URLS[n].format(hexes=hx), only=name)
+            except FeedError:
+                continue
+            for a in ac:
+                h = (a.get("hex") or "").lower()
+                age = a.get("seen_pos", a.get("seen", 999))
+                if h and (h not in best or age < best[h][0]):
+                    best[h] = (age, a)
+        return [a for _, a in best.values()]
+
+    def fetch(self, url_for=None, only=None):
         """Return (provider, now_epoch, aircraft list). Raises FeedError if all fail."""
         ap = self.cfg["airport"]
         errors = []
-        for name in self.cfg["providers"]:
+        self.last_errors = errors
+        for name in ([only] if only else self.cfg["providers"]):
             tpl, key, gap = PROVIDERS[name]
             ps = self._pstate(name)
             if ps.get("skip_until", 0) > time.time():

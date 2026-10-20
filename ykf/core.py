@@ -1,6 +1,7 @@
 """Pure tracking logic: match feed aircraft to the watch list / Skycare,
 decide alerts (once per aircraft per shift), build live-page rows.
 No network, no AI. Everything here is unit-tested."""
+import datetime as dt
 import json
 import os
 import re
@@ -178,6 +179,7 @@ def step(feed_ac, watch, sky, state, shift, now, cfg):
     ap = cfg["airport"]
     radius = cfg["alert_radius_nm"]
     sh = state.setdefault("shifts", {}).setdefault(shift["id"], {"alerted": {}, "tracks": {}})
+    note_poll(sh, now, cfg)
     alerts = []
     seen_keys = set()
     for raw in feed_ac:
@@ -196,8 +198,12 @@ def step(feed_ac, watch, sky, state, shift, now, cfg):
         typ = (w or {}).get("type") or ac["type"]
         eta = (w or {}).get("eta")
         rec = None
+        kind = "near-10nm"
+        prev = dict(sh["tracks"].get(tail) or {})
         if w:
             fire = scheduled_alert_ok(ac, radius)
+            if not fire and landed_unalerted(ac, prev, sh, now, cfg):
+                fire, kind = True, "landed-unalerted"
         else:
             # unscheduled Skycare: early inbound alert + 10 NM alert, each once per flight
             rec, early = skyflight.observe(state, key, ac, now, cfg)
@@ -212,6 +218,8 @@ def step(feed_ac, watch, sky, state, shift, now, cfg):
                 sh["tracks"].pop(tail, None)  # passing by / turned away: not shown
                 continue
             tr["inbound"] = bool(showing and ac["dist"] > radius)
+        elif w:
+            tr["inbound"] = scheduled_inbound(ac, prev)
         tr.update(tail=tail, hex=ac["hex"], type=typ, eta=eta, scheduled=bool(w), skycare=is_sky,
                   dist_nm=round(ac["dist"], 1), alt_ft=ac["alt"], ground=ac["ground"],
                   rate_fpm=ac["rate"], gs_kt=ac["gs"], last_seen=iso(now))
@@ -226,9 +234,13 @@ def step(feed_ac, watch, sky, state, shift, now, cfg):
             tr["alerted_at"] = iso(now)
             text = alert_text(tail, typ, ac["dist"], ac["alt"], ac["ground"], eta, is_sky,
                               ap["short"], scheduled=bool(w))
+            if kind == "landed-unalerted":
+                text = "%s on the ground at %s (%.1f NM), ETA %s, no 10 NM alert was sent%s" % (
+                    pretty_tail(tail) + (" " + typ if typ else ""), ap["short"], ac["dist"], eta or "none",
+                    _gap_note(sh, now, cfg))
             alerts.append({
                 "id": "%s-%s-%s" % (shift["id"].replace(":", ""), tail, now.strftime("%H%M%S")),
-                "alert_type": "near-10nm",
+                "alert_type": kind,
                 "created": iso(now), "time": hhmm(now),
                 "shift": {"id": shift["id"], "start": iso(shift["start"]), "end": iso(shift["end"])},
                 "tail": pretty_tail(tail), "hex": ac["hex"], "type": typ,
@@ -240,6 +252,154 @@ def step(feed_ac, watch, sky, state, shift, now, cfg):
                 "text": text, "sms_text": text[:160],
                 "channel_hint": "in-app", "delivered": False,
             })
+    return alerts
+
+
+# ---------- blind spots: box pauses, feed outages, lost contact ----------
+
+def note_poll(sh, now, cfg):
+    """Record this successful poll. A gap since the previous one (box paused,
+    feed down, process stalled) is kept in sh['last_gap'] so the safety net can
+    say what may have been missed."""
+    prev = sh.get("last_poll")
+    sh["last_poll"] = iso(now)
+    if not prev:
+        return None
+    blind = now.timestamp() - _ts(prev)
+    if blind >= cfg["gap_alert_s"]:
+        sh["last_gap"] = {"from": prev, "to": iso(now), "s": int(blind), "alerted": False}
+        return sh["last_gap"]
+    return None
+
+
+def _recent_gap(sh, now, cfg):
+    g = sh.get("last_gap")
+    if g and now.timestamp() - _ts(g["to"]) <= cfg["gap_recent_s"]:
+        return g
+    return None
+
+
+def _gap_note(sh, now, cfg):
+    g = _recent_gap(sh, now, cfg)
+    if not g:
+        return ""
+    return " (tracker was blind %d min, %s to %s)" % (round(g["s"] / 60.0), hhmm(_dt(g["from"])), hhmm(_dt(g["to"])))
+
+
+def landed_unalerted(ac, prev, sh, now, cfg):
+    """A scheduled arrival first seen ON THE GROUND at the field with no alert sent:
+    we missed the approach (box paused, feed gap, low-altitude coverage hole).
+    Only when it was seen airborne earlier this shift, or right after a blind gap,
+    so an aircraft parked on the ramp at shift start does not alert."""
+    if not ac["ground"] or ac["dist"] > cfg["landed_nm"]:
+        return False
+    was_airborne = bool(prev) and not prev.get("ground")
+    return was_airborne or _recent_gap(sh, now, cfg) is not None
+
+
+def scheduled_inbound(ac, prev):
+    """Is a scheduled arrival heading for the field? Vertical rate is ignored on
+    purpose: an aircraft climbing out of a nearby field toward CYKF (C-GFLZ on
+    2026-10-20: +1,472 fpm at 26.6 NM, track at the field) is still inbound.
+    Inbound = airborne and (pointed within 90 deg of the field, or closing)."""
+    if ac["ground"]:
+        return False
+    if ac["off_track_deg"] is not None and ac["off_track_deg"] <= 90:
+        return True
+    pd = prev.get("dist_nm") if prev and not prev.get("ground") else None
+    return pd is not None and ac["dist"] < pd - 0.2
+
+
+def eta_datetime(shift, eta):
+    """'19:30' -> aware datetime inside this shift (handles shifts past midnight)."""
+    if not eta:
+        return None
+    h, m = map(int, eta.split(":"))
+    base = shift.get("win_start") or shift["start"]
+    t = shift["start"].replace(hour=h, minute=m, second=0, microsecond=0)
+    if t < base - dt.timedelta(hours=2):
+        t += dt.timedelta(days=1)
+    return t
+
+
+def _safety_alert(kind, tail, w, now, shift, text, tr=None):
+    return {
+        "id": "%s-%s-%s-%s" % (shift["id"].replace(":", ""), tail, kind, now.strftime("%H%M%S")),
+        "alert_type": kind, "created": iso(now), "time": hhmm(now),
+        "shift": {"id": shift["id"], "start": iso(shift["start"]), "end": iso(shift["end"])},
+        "tail": pretty_tail(tail), "hex": (tr or {}).get("hex") or w.get("hex"), "type": w.get("type", ""),
+        "distance_nm": (tr or {}).get("dist_nm"),
+        "altitude_ft": ((tr or {}).get("alt_ft") if not (tr or {}).get("ground") else "ground"),
+        "last_seen": (tr or {}).get("last_seen"),
+        "eta": w.get("eta") or "no ETA", "has_eta": bool(w.get("eta")),
+        "on_flightbridge": True, "skycare": False,
+        "text": text, "sms_text": text[:160], "channel_hint": "in-app", "delivered": False,
+    }
+
+
+def safety_net(state, shift, watch, now, cfg):
+    """Scheduled arrivals that never got a 10 NM alert. Run after step() on every
+    good poll. Each kind fires at most once per arrival per shift:
+      tracker-gap       the tracker was blind >= gap_alert_s and an arrival was
+                        close or due during/just after the gap
+      contact-lost      last seen airborne, heading in, within lost_inbound_nm,
+                        and no position for lost_after_s
+      eta-no-contact    within eta_warn_min of ETA and not seen inside 10 NM
+    """
+    sh = state.setdefault("shifts", {}).setdefault(shift["id"], {"alerted": {}, "tracks": {}})
+    sn = sh.setdefault("safety", {})
+    short = cfg["airport"]["short"]
+    alerts = []
+    pending = []
+    for tail, w in watch["by_tail"].items():
+        if tail in sh["alerted"] or (w.get("hex") and w["hex"] in sh["alerted"]):
+            continue
+        pending.append((tail, w, sh["tracks"].get(tail), sn.setdefault(tail, {})))
+
+    g = _recent_gap(sh, now, cfg)
+    if g and not g.get("alerted"):
+        g["alerted"] = True
+        g0, g1 = _dt(g["from"]), _dt(g["to"])
+        hit = []
+        for tail, w, tr, done in pending:
+            eta = eta_datetime(shift, w.get("eta"))
+            close = tr and not tr.get("ground") and tr["dist_nm"] <= cfg["lost_inbound_nm"] and tr.get("inbound", True)
+            due = eta and g0 - dt.timedelta(minutes=30) <= eta <= g1 + dt.timedelta(minutes=60)
+            if close or due:
+                hit.append((tail, w, tr, done))
+        if hit:
+            names = "; ".join("%s%s%s" % (pretty_tail(t), " ETA " + w["eta"] if w.get("eta") else "",
+                                          (", last seen %s %.0f NM out" % (hhmm(_dt(tr["last_seen"])), tr["dist_nm"]))
+                                          if tr and tr.get("last_seen") else "") for t, w, tr, _ in hit)
+            text = "YKF tracker was blind %d min (%s to %s), may have missed: %s" % (
+                round(g["s"] / 60.0), hhmm(g0), hhmm(g1), names)
+            a = _safety_alert("tracker-gap", hit[0][0], hit[0][1], now, shift, text, hit[0][2])
+            a["tails"] = [pretty_tail(t) for t, _, _, _ in hit]
+            alerts.append(a)
+            for _, _, _, done in hit:
+                done["gap"] = done["lost"] = iso(now)
+
+    for tail, w, tr, done in pending:
+        name = pretty_tail(tail) + (" " + w["type"] if w.get("type") else "")
+        if tr and not tr.get("ground") and not done.get("lost"):
+            age = now.timestamp() - _ts(tr["last_seen"])
+            if age >= cfg["lost_after_s"] and tr["dist_nm"] <= cfg["lost_inbound_nm"] and tr.get("inbound"):
+                done["lost"] = iso(now)
+                text = "%s lost signal %.0f NM from %s at %s, heading in (last seen %s), ETA %s" % (
+                    name, tr["dist_nm"], short, fmt_alt(tr.get("alt_ft")), hhmm(_dt(tr["last_seen"])),
+                    w.get("eta") or "none")
+                alerts.append(_safety_alert("contact-lost", tail, w, now, shift, text, tr))
+                continue
+        eta = eta_datetime(shift, w.get("eta"))
+        if eta and not done.get("eta") and not done.get("gap"):
+            lead = (eta - now).total_seconds() / 60.0
+            fresh_inside = tr and now.timestamp() - _ts(tr["last_seen"]) < cfg["lost_after_s"] \
+                and tr["dist_nm"] <= cfg["alert_radius_nm"]
+            if -120 <= lead <= cfg["eta_warn_min"] and not fresh_inside:
+                done["eta"] = iso(now)
+                seen = ("last seen %s, %.0f NM out" % (hhmm(_dt(tr["last_seen"])), tr["dist_nm"])) if tr else "not seen on ADS-B yet"
+                text = "%s due %s at %s, no 10 NM alert yet (%s)" % (name, w["eta"], short, seen)
+                alerts.append(_safety_alert("eta-no-contact", tail, w, now, shift, text, tr))
     return alerts
 
 
@@ -283,3 +443,8 @@ def live_rows(state, shift, watch, now, cfg):
 def _ts(s):
     from .timeutil import parse_iso
     return parse_iso(s).timestamp()
+
+
+def _dt(s):
+    from .timeutil import parse_iso
+    return parse_iso(s)

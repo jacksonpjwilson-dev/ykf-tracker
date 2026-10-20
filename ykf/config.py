@@ -48,6 +48,16 @@ DEFAULTS = {
     "skycare_early": {"track_tol_deg": 15, "track_tol_desc_deg": 25, "desc_bonus_fpm": -500,
                       "max_cross_track_nm": 20, "min_gs_kt": 60, "depart_nm": 8, "flight_gap_min": 20},
     "lost_after_s": 300,
+    # Blind-spot safety net (see core.safety_net / README "Missed arrivals").
+    "gap_alert_s": 300,          # no good poll for this long = tracker was blind (box paused, feed down)
+    "gap_recent_s": 600,         # how long after a gap a ground sighting at the field still counts as missed
+    "landed_nm": 3,              # 'on the ground at the field'
+    "lost_inbound_nm": 40,       # contact lost while heading in within this range -> alert
+    "eta_warn_min": 10,          # scheduled arrival due within this many minutes, not seen inside 10 NM -> alert
+    "feed_stale_alert_s": 300,   # every feed failing this long -> tracker-health alert
+    "catchup_every_s": 60,       # extra all-provider hex lookup for watched tails when one is lost/after a gap
+    "feed_timeout_s": 10,        # per socket operation
+    "feed_total_timeout_s": 30,  # whole request, so a slow-drip response cannot stall the loop
     "page_show_operator": False,
     # Public live.json -> single-commit, force-pushed 'data' branch (raw.githubusercontent.com)
     "publish": {"enabled": False, "repo": "jacksonpjwilson-dev/ykf-tracker", "branch": "data", "every_s": 120,

@@ -55,6 +55,18 @@ cd docs && python3 -m http.server 18791            # view the page locally
  "channel_hint":"in-app","delivered":false}
 ```
 
+## Missed arrivals and blind spots (safety net)
+The 10 NM alert needs a poll to run while the aircraft is airborne inside 10 NM. If the box is paused, every feed is down, or the aircraft is in a coverage hole low down, that moment can pass unseen. The 2026-10-20 miss was exactly this: the box paused for about 15 min while a scheduled arrival flew its last 25 NM and landed. These extra alerts use the same channel (pending file, then one issue, then Tower). Each fires at most once per arrival per shift, and only for a scheduled arrival that hasn't had a 10 NM alert. Every alert carries a plain `text`.
+- **`landed-unalerted`:** the arrival is seen on the ground within 3 NM of CYKF with no alert sent, and it was either seen airborne earlier in the shift or this is just after a blind gap. An aircraft parked on the ramp at shift start doesn't fire.
+- **`tracker-gap`:** no good poll for 5 min or more (`gap_alert_s`) while an arrival was heading in within 40 NM or was due from 30 min before the gap to 60 min after it. This sends one alert that names all of them.
+- **`contact-lost`:** last seen airborne heading in, within 40 NM, with no position for 5 min.
+- **`eta-no-contact`:** 10 min before the ETA (`eta_warn_min`), not seen inside 10 NM. It covers up to 2 h after the ETA.
+- **`tracker-health`:** every feed has been failing for 5 min (`feed_stale_alert_s`). It sends one alert per outage, and `FEED RECOVERED` is logged afterwards.
+- **Catch-up lookup:** after a gap, or while an arrival is lost, the tracker asks every working provider (not just the first) for the watched hexes once a minute and merges the freshest result, because coverage differs between the networks, especially on the ground. Watched hexes also ride along on the 2-minute fleet lookup.
+- **Climbs:** a scheduled arrival counts as inbound when it's airborne and pointed within 90° of the field, or getting closer, whatever its vertical rate. A climb out of a nearby field toward CYKF is still inbound.
+- **Timeouts:** each feed request has 10 s per socket read and 30 s in total, so a slow-dripping response can't stall the loop. The log also shows `TRACKER GAP` and `feed provider now …` lines when the poll cadence breaks or the feed fails over.
+- **Known limit:** nothing inside the box can alert *while* the box is paused. The alerts above fire on the first poll after it resumes.
+
 ## Live page privacy
 The rows carry only tail, type, ETA, distance, altitude, last seen, status and an "unscheduled" note. There are no owner or operator names, no hex codes, no links and no client info. `page_show_operator` is false.
 

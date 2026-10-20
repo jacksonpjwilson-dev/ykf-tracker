@@ -22,7 +22,8 @@ import urllib.request
 import zipfile
 
 from . import config as config_mod
-from .core import build_watch, live_rows, load_arrivals, load_skycare, step
+from .core import build_watch, live_rows, load_arrivals, load_skycare, safety_net, step
+from .timeutil import parse_iso
 from .feeds import FeedError, Feeds
 from . import github as gh
 from .regs import Resolver
@@ -92,6 +93,11 @@ class Tracker:
         self.last_publish = 0
         self.last_fleet = 0
         self.issue_dry_run = False
+        self.feed_ok_ts = time.time()   # watchdog: last successful feed fetch (wall clock)
+        self.feed_down_alerted = False
+        self.last_provider = None
+        self.last_catchup = 0
+        self.last_poll_wall = None
 
     def reload_arrivals(self):
         p = self.cfg["paths"]["arrivals"]
@@ -105,26 +111,83 @@ class Tracker:
                 ", ".join("%s=%s" % (t, e["hex"] or "?") for t, e in self.watch["by_tail"].items()),
                 (" problems: " + "; ".join(self.problems)) if self.problems else ""))
 
+    def _needs_catchup(self, shift, t):
+        """Gap since the last good poll, or a watched arrival lost while heading in."""
+        sh = self.state.get("shifts", {}).get(shift["id"]) or {}
+        lp = sh.get("last_poll")
+        if lp and t.timestamp() - parse_iso(lp).timestamp() >= self.cfg["gap_alert_s"]:
+            return True
+        for tail in self.watch["by_tail"]:
+            tr = (sh.get("tracks") or {}).get(tail)
+            if tail in sh.get("alerted", {}) or not tr or tr.get("ground"):
+                continue
+            if t.timestamp() - parse_iso(tr["last_seen"]).timestamp() >= self.cfg["lost_after_s"] / 2 \
+                    and tr["dist_nm"] <= self.cfg["lost_inbound_nm"]:
+                return True
+        return False
+
+    def feed_watchdog(self, shift, t, ok, err=""):
+        """Every feed failing for feed_stale_alert_s -> one tracker-health alert
+        through the normal channel (pending file + issue -> Tower)."""
+        if ok:
+            if self.feed_down_alerted:
+                log(self.cfg, "FEED RECOVERED after %d min" % round((time.time() - self.feed_ok_ts) / 60.0))
+            self.feed_ok_ts = time.time()
+            self.feed_down_alerted = False
+            return []
+        down = time.time() - self.feed_ok_ts
+        if down < self.cfg["feed_stale_alert_s"] or self.feed_down_alerted:
+            return []
+        self.feed_down_alerted = True
+        text = "YKF tracker: no ADS-B data for %d min (all feeds failing), arrival alerts may be missed" % round(down / 60.0)
+        log(self.cfg, "FEED DOWN %s | %s" % (text, err[:200]))
+        return [{"id": "%s-tracker-health-%s" % (shift["id"].replace(":", ""), t.strftime("%H%M%S")),
+                 "alert_type": "tracker-health", "created": iso(t), "time": t.strftime("%H:%M"),
+                 "shift": {"id": shift["id"], "start": iso(shift["start"]), "end": iso(shift["end"])},
+                 "tail": "", "type": "", "distance_nm": None, "altitude_ft": None, "eta": "",
+                 "text": text, "sms_text": text[:160], "channel_hint": "in-app", "delivered": False}]
+
     def poll(self, shift):
         self.reload_arrivals()
         t = tnow()
+        wall = time.time()
+        if self.last_poll_wall and wall - self.last_poll_wall >= self.cfg["gap_alert_s"]:
+            log(self.cfg, "TRACKER GAP: %d min since the last poll (box paused or process stalled)" % round(
+                (wall - self.last_poll_wall) / 60.0))
+        self.last_poll_wall = wall
+        watch_hexes = [e["hex"] for e in self.watch["by_tail"].values() if e.get("hex")]
         try:
             provider, _, ac = self.feeds.fetch()
             feed_status = {"provider": provider, "ok": True, "count": len(ac)}
+            if provider != self.last_provider:
+                log(self.cfg, "feed provider now %s%s" % (provider, (" (" + "; ".join(self.feeds.last_errors) + ")")
+                                                          if self.feeds.last_errors else ""))
+                self.last_provider = provider
             if time.time() - self.last_fleet >= self.cfg["fleet_lookup_every_s"]:
                 self.last_fleet = time.time()
                 try:
-                    _, _, fac = self.feeds.fetch_hexes(self.sky["hexes"].keys())
+                    _, _, fac = self.feeds.fetch_hexes(list(self.sky["hexes"].keys()) + watch_hexes)
                     have = {a.get("hex") for a in ac}
                     ac = ac + [a for a in fac if a.get("hex") not in have]
                     feed_status["fleet"] = len(fac)
                 except FeedError as e:
                     log(self.cfg, "fleet lookup error: %s" % e)
+            if watch_hexes and time.time() - self.last_catchup >= self.cfg["catchup_every_s"] \
+                    and self._needs_catchup(shift, t):
+                self.last_catchup = time.time()
+                cac = self.feeds.fetch_hexes_all(watch_hexes)
+                have = {a.get("hex") for a in ac}
+                ac = ac + [a for a in cac if a.get("hex") not in have]
+                feed_status["catchup"] = len(cac)
+                log(self.cfg, "catch-up lookup for watched tails: %d found on any feed" % len(cac))
         except FeedError as e:
             provider, ac = None, []
             feed_status = {"provider": None, "ok": False, "error": str(e)}
             log(self.cfg, "feed error: %s" % e)
-        alerts = step(ac, self.watch, self.sky, self.state, shift, t, self.cfg) if provider else []
+        alerts = self.feed_watchdog(shift, t, bool(provider), feed_status.get("error", ""))
+        if provider:
+            alerts += step(ac, self.watch, self.sky, self.state, shift, t, self.cfg)
+            alerts += safety_net(self.state, shift, self.watch, t, self.cfg)
         for a in alerts:  # pending files first: always written, even if GitHub is down
             atomic_json(os.path.join(self.cfg["paths"]["alerts_pending"], a["id"] + ".json"), a)
             log(self.cfg, "ALERT %s" % a["text"])
@@ -267,6 +330,8 @@ def cmd_supervise(cfg, online):
         if shift["id"] != active_id:
             active_id = shift["id"]
             tr.last_publish = 0  # publish on the first poll of the window
+            tr.feed_ok_ts = time.time()
+            tr.last_poll_wall = None
             log(cfg, "window open for shift %s (%s–%s)" % (shift["id"], shift["start"].strftime("%H:%M"), shift["end"].strftime("%H:%M")))
         started = time.time()
         try:
