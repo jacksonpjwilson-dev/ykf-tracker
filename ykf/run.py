@@ -22,7 +22,8 @@ import urllib.request
 import zipfile
 
 from . import config as config_mod
-from .core import build_watch, live_rows, load_arrivals, load_skycare, safety_net, step
+from .core import (build_watch, covered_until, gap_report, listed_after_gap, live_rows, load_arrivals,
+                   load_skycare, safety_net, snapshot_arrivals, step)
 from .timeutil import parse_iso
 from .feeds import FeedError, Feeds
 from . import github as gh
@@ -98,6 +99,7 @@ class Tracker:
         self.last_provider = None
         self.last_catchup = 0
         self.last_poll_wall = None
+        self.last_pending_check = 0
 
     def reload_arrivals(self):
         p = self.cfg["paths"]["arrivals"]
@@ -148,9 +150,109 @@ class Tracker:
                  "tail": "", "type": "", "distance_nm": None, "altitude_ft": None, "eta": "",
                  "text": text, "sms_text": text[:160], "channel_hint": "in-app", "delivered": False}]
 
-    def poll(self, shift):
+    def mark_covered(self, t, next_in=None):
+        """The supervisor is alive at t and plans to look again within next_in s
+        (poll interval, or the idle sleep). Saved in state.json."""
+        self.state["covered_until"] = iso(t)
+        self.state["next_check_by"] = iso(t + dt.timedelta(seconds=self.cfg["poll_seconds"] if next_in is None else next_in))
+
+    def gap_since(self, t):
+        """Start of the gap when this loop is gap_alert_s or more later than planned
+        (box paused, process dead, calendar errors), else None. Reads state.json, so
+        it also works on the first loop after a restart."""
+        cf = covered_until(self.state)
+        if not self.state.get("covered_until"):
+            # state written by an older version: it saves state.json on every loop
+            # (idle too), so the file's mtime is the last sign of life.
+            try:
+                m = dt.datetime.fromtimestamp(os.path.getmtime(self.cfg["paths"]["state"]), t.tzinfo)
+                cf = max(cf, m) if cf else m
+            except OSError:
+                pass
+        if not cf:
+            return None
+        due = parse_iso(self.state["next_check_by"]) if self.state.get("next_check_by") else cf
+        if (t - due).total_seconds() >= self.cfg["gap_alert_s"]:
+            return cf
+        return None
+
+    def report_gap(self, shifts, gap_from, t):
+        alert, info = gap_report(self.state, shifts, self.arrivals_doc, gap_from, t, self.cfg)
+        if info["s"] >= self.cfg["gap_alert_s"]:
+            log(self.cfg, "TRACKER GAP: not running %s to %s (%d min); overlapped %s; %d arrival(s) due in it" % (
+                info["from"], info["to"], round(info["s"] / 60.0),
+                ", ".join(w["shift"] for w in info["windows"]) or "no shift window", len(info["missed"])))
+        return [alert] if alert else []
+
+    def deliver(self, alerts):
+        for a in alerts:  # pending files first: always written, even if GitHub is down
+            atomic_json(os.path.join(self.cfg["paths"]["alerts_pending"], a["id"] + ".json"), a)
+            log(self.cfg, "ALERT %s" % a["text"])
+        if alerts:
+            self.open_issue(alerts)
+
+    def recheck_pending(self, t):
+        """Alerts still in alerts/pending: retry a failed issue, re-wake Tower on an
+        issue still open after redeliver_after_s, archive alerts older than
+        pending_stale_s to alerts/stale (never deleted)."""
+        if time.time() - self.last_pending_check < self.cfg["pending_check_every_s"]:
+            return
+        self.last_pending_check = time.time()
+        d = self.cfg["paths"]["alerts_pending"]
+        if not os.path.isdir(d):
+            return
+        for fn in sorted(os.listdir(d)):
+            if not fn.endswith(".json"):
+                continue
+            path = os.path.join(d, fn)
+            try:
+                a = json.load(open(path))
+                age = (t - parse_iso(a["created"])).total_seconds()
+            except Exception as e:
+                log(self.cfg, "pending %s unreadable: %s" % (fn, e))
+                continue
+            if age >= self.cfg["pending_stale_s"]:
+                sd = os.path.join(os.path.dirname(d), "stale")
+                a.update(archived=iso(t), archive_reason="undelivered after %d h; alert is out of date" % (age // 3600))
+                atomic_json(os.path.join(sd, fn), a)
+                os.remove(path)
+                log(self.cfg, "STALE pending alert archived to alerts/stale: %s (issue #%s)" % (a.get("text", fn), a.get("issue")))
+                continue
+            if not (self.cfg["issues"]["enabled"] or self.issue_dry_run):
+                continue
+            if not a.get("issue"):
+                last = a.get("last_issue_attempt")
+                if age >= 120 and a.get("issue_attempts", 0) < 3 and (
+                        not last or (t - parse_iso(last)).total_seconds() >= 600):
+                    a["issue_attempts"] = a.get("issue_attempts", 0) + 1
+                    a["last_issue_attempt"] = iso(t)
+                    atomic_json(path, a)
+                    log(self.cfg, "retrying issue for pending alert %s" % fn)
+                    self.open_issue([a])
+                continue
+            last = a.get("last_rewake")
+            if age >= self.cfg["redeliver_after_s"] and a.get("rewakes", 0) < 2 and (
+                    not last or (t - parse_iso(last)).total_seconds() >= 1800):
+                try:
+                    st = gh.issue_state(self.cfg, a["issue"])
+                    if st == "OPEN":
+                        gh.rewake(self.cfg, a["issue"])
+                        a["rewakes"] = a.get("rewakes", 0) + 1
+                        a["last_rewake"] = iso(t)
+                        log(self.cfg, "re-woke Tower on issue #%s (alert pending %d min)" % (a["issue"], age // 60))
+                    elif not a.get("closed_but_pending"):
+                        a["closed_but_pending"] = iso(t)
+                        log(self.cfg, "issue #%s is %s but alert %s is still pending" % (a["issue"], st, fn))
+                    atomic_json(path, a)
+                except Exception as e:
+                    log(self.cfg, "re-wake check failed for issue #%s: %s" % (a.get("issue"), e))
+
+    def poll(self, shift, shifts=None, gap_from=None):
         self.reload_arrivals()
         t = tnow()
+        late_gap = None
+        if snapshot_arrivals(self.state, shift, self.arrivals_doc):
+            late_gap = listed_after_gap(self.state, shift, t, self.cfg)
         wall = time.time()
         if self.last_poll_wall and wall - self.last_poll_wall >= self.cfg["gap_alert_s"]:
             log(self.cfg, "TRACKER GAP: %d min since the last poll (box paused or process stalled)" % round(
@@ -195,11 +297,12 @@ class Tracker:
                 d["late_logged"] = True
                 log(self.cfg, "late add: %s listed with ETA %s already past, no ETA alert (10 NM alert still armed)" % (
                     tail, d.get("eta_v")))
-        for a in alerts:  # pending files first: always written, even if GitHub is down
-            atomic_json(os.path.join(self.cfg["paths"]["alerts_pending"], a["id"] + ".json"), a)
-            log(self.cfg, "ALERT %s" % a["text"])
-        if alerts:
-            self.open_issue(alerts)
+        if gap_from is not None:
+            alerts += self.report_gap(shifts or [shift], gap_from, t)
+        if late_gap:
+            alerts.append(late_gap)
+        self.deliver(alerts)
+        self.mark_covered(t)
         doc = self.write_live(shift, t, feed_status)
         if alerts or time.time() - self.last_publish >= self.cfg["publish"]["every_s"]:
             self.publish(doc)
@@ -314,9 +417,14 @@ def cmd_supervise(cfg, online):
             time.sleep(600)
             continue
         t = tnow()
+        gap_from = tr.gap_since(t)  # also right after a restart: covered_until is in state.json
         shift = current_window(shifts, t)
+        tr.recheck_pending(t)
         if not shift:
             nxt = next_window(shifts, t)
+            if gap_from is not None:  # resumed after the window ended: still report what was missed
+                tr.reload_arrivals()
+                tr.deliver(tr.report_gap(shifts, gap_from, t))
             if active_id:
                 log(cfg, "window for shift %s ended" % active_id)
                 active_id = None
@@ -330,8 +438,9 @@ def cmd_supervise(cfg, online):
             prune_state(tr.state, {s["id"] for s in shifts if s["end"] > t - dt.timedelta(days=2)})
             from .skyflight import prune as prune_flights
             prune_flights(tr.state, t)
-            atomic_json(cfg["paths"]["state"], tr.state)
             secs = 600 if not nxt else max(5, min(600, (nxt["win_start"] - t).total_seconds()))
+            tr.mark_covered(t, secs)
+            atomic_json(cfg["paths"]["state"], tr.state)
             time.sleep(secs)  # cheap idle; recheck calendar at most every 10 min
             continue
         if shift["id"] != active_id:
@@ -342,7 +451,7 @@ def cmd_supervise(cfg, online):
             log(cfg, "window open for shift %s (%s–%s)" % (shift["id"], shift["start"].strftime("%H:%M"), shift["end"].strftime("%H:%M")))
         started = time.time()
         try:
-            tr.poll(shift)
+            tr.poll(shift, shifts, gap_from)
         except Exception as e:  # never die mid-shift
             log(cfg, "poll error: %r" % e)
         time.sleep(max(1, cfg["poll_seconds"] - (time.time() - started)))

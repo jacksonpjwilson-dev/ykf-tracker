@@ -351,8 +351,8 @@ def _safety_alert(kind, tail, w, now, shift, text, tr=None):
 def safety_net(state, shift, watch, now, cfg):
     """Scheduled arrivals that never got a 10 NM alert. Run after step() on every
     good poll. Each kind fires at most once per arrival per shift:
-      tracker-gap       the tracker was blind >= gap_alert_s and an arrival was
-                        close or due during/just after the gap
+      (tracker-gap now lives in gap_report(), run by the supervisor loop, so it
+       also fires when the box resumes after the window has ended)
       contact-lost      last seen airborne, heading in, within lost_inbound_nm,
                         and no position for lost_after_s
       eta-no-contact    not visible on ADS-B right now and the ETA is within
@@ -369,29 +369,6 @@ def safety_net(state, shift, watch, now, cfg):
         if tail in sh["alerted"] or (w.get("hex") and w["hex"] in sh["alerted"]):
             continue
         pending.append((tail, w, sh["tracks"].get(tail), sn.setdefault(tail, {})))
-
-    g = _recent_gap(sh, now, cfg)
-    if g and not g.get("alerted"):
-        g["alerted"] = True
-        g0, g1 = _dt(g["from"]), _dt(g["to"])
-        hit = []
-        for tail, w, tr, done in pending:
-            eta = eta_datetime(shift, w.get("eta"))
-            close = tr and not tr.get("ground") and tr["dist_nm"] <= cfg["lost_inbound_nm"] and tr.get("inbound", True)
-            due = eta and g0 - dt.timedelta(minutes=30) <= eta <= g1 + dt.timedelta(minutes=60)
-            if close or due:
-                hit.append((tail, w, tr, done))
-        if hit:
-            names = "; ".join("%s%s%s" % (pretty_tail(t), " ETA " + w["eta"] if w.get("eta") else "",
-                                          (", last seen %s %.0f NM out" % (hhmm(_dt(tr["last_seen"])), tr["dist_nm"]))
-                                          if tr and tr.get("last_seen") else "") for t, w, tr, _ in hit)
-            text = "YKF tracker was blind %d min (%s to %s), may have missed: %s" % (
-                round(g["s"] / 60.0), hhmm(g0), hhmm(g1), names)
-            a = _safety_alert("tracker-gap", hit[0][0], hit[0][1], now, shift, text, hit[0][2])
-            a["tails"] = [pretty_tail(t) for t, _, _, _ in hit]
-            alerts.append(a)
-            for _, _, _, done in hit:
-                done["gap"] = done["lost"] = iso(now)
 
     for tail, w, tr, done in pending:
         name = pretty_tail(tail) + (" " + w["type"] if w.get("type") else "")
@@ -438,6 +415,153 @@ def safety_net(state, shift, watch, now, cfg):
         a["adsb_visible"] = bool(tr) and not no_adsb
         alerts.append(a)
     return alerts
+
+
+# ---------- gaps: the tracker itself was not running ----------
+
+def arrivals_match_shift(doc, shift):
+    """Is this arrivals.json for this shift? Uses doc['shift'] (date + start), else
+    an 'updated' time inside the window (or up to 2 h before it)."""
+    ds = doc.get("shift") or {}
+    if ds.get("date") and ds.get("start"):
+        return ds["date"] == shift["start"].strftime("%Y-%m-%d") and ds["start"] == shift["start"].strftime("%H:%M")
+    try:
+        u = _dt(doc.get("updated"))
+    except Exception:
+        return False
+    return shift["win_start"] - dt.timedelta(hours=2) <= u <= shift["win_end"]
+
+
+def snapshot_arrivals(state, shift, doc):
+    """Keep this shift's arrival list (all rows, duplicates of a tail included) in
+    state, so a gap that is only noticed after the window ends can still say what
+    was due."""
+    if not arrivals_match_shift(doc, shift):
+        return False
+    sh = state.setdefault("shifts", {}).setdefault(shift["id"], {"alerted": {}, "tracks": {}})
+    snap = [{"tail": a["tail"], "type": a.get("type", ""), "eta": a.get("eta")} for a in doc.get("arrivals", [])]
+    if sh.get("arrivals") != snap:
+        sh["arrivals"] = snap
+        sh["arrivals_updated"] = doc.get("updated")
+        return True
+    return False
+
+
+def covered_until(state):
+    """Last moment the supervisor is known to have been running: written every
+    loop (polls and idle checks). Older state files: newest shift last_poll."""
+    if state.get("covered_until"):
+        return _dt(state["covered_until"])
+    lps = [_dt(v["last_poll"]) for v in state.get("shifts", {}).values() if v.get("last_poll")]
+    return max(lps) if lps else None
+
+
+def _fmt_dur(sec):
+    m = int(round(sec / 60.0))
+    return "%d h %02d min" % (m // 60, m % 60) if m >= 60 else "%d min" % m
+
+
+def gap_report(state, shifts, cur_doc, gap_from, now, cfg):
+    """The supervisor did not run from gap_from to now (box paused, process dead,
+    calendar error loop). For every shift window the gap overlapped by at least
+    gap_alert_s, list arrivals that were due from 30 min before the blind part to
+    60 min after it (capped at the window end) and never alerted, plus scheduled
+    tracks last seen heading in within lost_inbound_nm.
+    Returns (alert or None, info). Fires at most once per gap: the caller keys it
+    on gap_from via state['gap_reported']."""
+    info = {"from": iso(gap_from), "to": iso(now), "s": int((now - gap_from).total_seconds()), "windows": [], "missed": []}
+    if info["s"] < cfg["gap_alert_s"] or state.get("gap_reported") == iso(gap_from):
+        return None, info
+    state["gap_reported"] = iso(gap_from)
+    missed, first = [], None
+    for shf in shifts:
+        b0, b1 = max(gap_from, shf["win_start"]), min(now, shf["win_end"])
+        if (b1 - b0).total_seconds() < cfg["gap_alert_s"]:
+            continue
+        info["windows"].append({"shift": shf["id"], "blind_from": iso(b0), "blind_to": iso(b1)})
+        sh = state.setdefault("shifts", {}).setdefault(shf["id"], {"alerted": {}, "tracks": {}})
+        sh.setdefault("blind", []).append([iso(b0), iso(b1)])
+        sn = sh.setdefault("safety", {})
+        arr = sh.get("arrivals")
+        if arr is None and cur_doc and arrivals_match_shift(cur_doc, shf):
+            arr = [{"tail": a["tail"], "type": a.get("type", ""), "eta": a.get("eta")} for a in cur_doc.get("arrivals", [])]
+        lo, hi = b0 - dt.timedelta(minutes=30), min(b1 + dt.timedelta(minutes=60), shf["win_end"])
+        seen = set()
+        for a in arr or []:
+            tail = norm_tail(a["tail"])
+            if tail in sh.get("alerted", {}):
+                continue
+            eta = eta_datetime(shf, a.get("eta"))
+            if eta and lo <= eta <= hi and (tail, a.get("eta")) not in seen:
+                seen.add((tail, a.get("eta")))
+                missed.append({"tail": pretty_tail(tail), "eta": a.get("eta"), "shift": shf["id"]})
+                sn.setdefault(tail, {})["gap"] = iso(now)
+                first = first or shf
+        for tail, tr in sh.get("tracks", {}).items():
+            if not tr.get("scheduled") or tr.get("ground") or tail in sh.get("alerted", {}):
+                continue
+            if any(norm_tail(m["tail"]) == tail and m["shift"] == shf["id"] for m in missed):
+                continue
+            if tr["dist_nm"] <= cfg["lost_inbound_nm"] and tr.get("inbound") and _dt(tr["last_seen"]) >= b0 - dt.timedelta(minutes=5):
+                missed.append({"tail": pretty_tail(tail), "eta": tr.get("eta"), "shift": shf["id"],
+                               "last_seen": tr["last_seen"], "dist_nm": tr["dist_nm"]})
+                sn.setdefault(tail, {})["gap"] = sn[tail]["lost"] = iso(now)
+                first = first or shf
+    info["missed"] = missed
+    if not missed:
+        return None, info
+    missed.sort(key=lambda m: (m["eta"] or "99:99"))
+    names = ", ".join("%s%s%s" % (m["tail"], " " + m["eta"] if m["eta"] else "",
+                                  " (last seen %s, %.0f NM out)" % (hhmm(_dt(m["last_seen"])), m["dist_nm"]) if m.get("last_seen") else "")
+                      for m in missed)
+    ended = now >= first["win_end"]
+    text = "YKF tracker was not running %s to %s (%s)%s. %d arrival%s not watched: %s. Check the ramp." % (
+        hhmm(gap_from), hhmm(now), _fmt_dur(info["s"]),
+        ", the %s-%s shift ended meanwhile" % (first["start"].strftime("%H:%M"), first["end"].strftime("%H:%M")) if ended else "",
+        len(missed), "s" if len(missed) != 1 else "", names)
+    alert = {
+        "id": "gap-%s" % gap_from.strftime("%Y%m%dT%H%M%S"), "alert_type": "tracker-gap",
+        "created": iso(now), "time": hhmm(now),
+        "shift": {"id": first["id"], "start": iso(first["start"]), "end": iso(first["end"])},
+        "tail": missed[0]["tail"] if len(missed) == 1 else "", "type": "", "distance_nm": None, "altitude_ft": None,
+        "eta": "", "tails": [m["tail"] for m in missed], "missed": missed,
+        "gap": {"from": info["from"], "to": info["to"], "minutes": round(info["s"] / 60.0)},
+        "text": text, "sms_text": text[:160], "channel_hint": "in-app", "delivered": False,
+    }
+    return alert, info
+
+
+def listed_after_gap(state, shift, now, cfg):
+    """arrivals.json changed: any arrival whose ETA fell inside an earlier blind
+    stretch of this shift that hasn't been reported yet? (Wed 2026-10-21: the box
+    was paused 07:30-11:07; C-GBMI ETA 08:24 was only listed at 11:22.)"""
+    sh = state.get("shifts", {}).get(shift["id"]) or {}
+    blind = [(_dt(a), _dt(b)) for a, b in sh.get("blind", [])]
+    if not blind:
+        return None
+    sn = sh.setdefault("safety", {})
+    hits = []
+    for a in sh.get("arrivals") or []:
+        tail = norm_tail(a["tail"])
+        eta = eta_datetime(shift, a.get("eta"))
+        if not eta or tail in sh.get("alerted", {}) or sn.get(tail, {}).get("gap"):
+            continue
+        for b0, b1 in blind:
+            if b0 - dt.timedelta(minutes=30) <= eta <= b1 + dt.timedelta(minutes=10):
+                hits.append((pretty_tail(tail), a["eta"], b0, b1))
+                sn.setdefault(tail, {})["gap"] = iso(now)
+                break
+    if not hits:
+        return None
+    names = ", ".join("%s %s" % (t, e) for t, e, _, _ in hits)
+    b0, b1 = hits[0][2], hits[0][3]
+    text = "YKF tracker was not running %s to %s; newly listed arrival%s due then, not watched: %s. Check the ramp." % (
+        hhmm(b0), hhmm(b1), "s" if len(hits) > 1 else "", names)
+    return {"id": "%s-gap-late-%s" % (shift["id"].replace(":", ""), now.strftime("%H%M%S")), "alert_type": "tracker-gap",
+            "created": iso(now), "time": hhmm(now),
+            "shift": {"id": shift["id"], "start": iso(shift["start"]), "end": iso(shift["end"])},
+            "tail": hits[0][0] if len(hits) == 1 else "", "type": "", "distance_nm": None, "altitude_ft": None, "eta": "",
+            "tails": [h[0] for h in hits], "text": text, "sms_text": text[:160], "channel_hint": "in-app", "delivered": False}
 
 
 def live_rows(state, shift, watch, now, cfg):

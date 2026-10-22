@@ -79,3 +79,15 @@ def create_issue(cfg, title, body, dry_run=False):
     out = _run(cmd, inp=body, timeout=60)
     url = out.strip().splitlines()[-1]
     return int(url.rstrip("/").split("/")[-1]), url
+
+
+def issue_state(cfg, num):
+    i = cfg["issues"]
+    return _run(["gh", "issue", "view", str(num), "-R", i["repo"], "--json", "state", "-q", ".state"], timeout=30).strip()
+
+
+def rewake(cfg, num):
+    """Fire a fresh issue-assigned event (Tower's wake trigger) on an open alert issue."""
+    i = cfg["issues"]
+    _run(["gh", "issue", "edit", str(num), "-R", i["repo"], "--remove-assignee", i["assignee"]], timeout=30)
+    _run(["gh", "issue", "edit", str(num), "-R", i["repo"], "--add-assignee", i["assignee"]], timeout=30)

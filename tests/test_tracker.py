@@ -245,12 +245,15 @@ class MissedArrival(unittest.TestCase):
         self.assertEqual(self.poll(st, self.at("18:23:12"), [_gflz(43.4586, -80.3848, "ground", 14, 309, None)]), [])
 
     def test_gap_and_aircraft_not_on_feed_fires_gap_alert_once(self):
+        from ykf.core import gap_report
         st = {}
         self.climb_leg(st)
-        a = self.poll(st, self.at("18:22:42"), [])
-        self.assertEqual([x["alert_type"] for x in a], ["tracker-gap"])
-        self.assertIn("blind 15 min (18:07 to 18:22)", a[0]["text"])
-        self.assertIn("C-GFLZ ETA 19:30, last seen 18:07 27 NM out", a[0]["text"])
+        shifts = [self.sh]
+        alert, info = gap_report(st, shifts, None, self.at("18:07:37"), self.at("18:22:42"), CFG)
+        self.assertEqual(alert["alert_type"], "tracker-gap")
+        self.assertIn("not running 18:07 to 18:22 (15 min)", alert["text"])
+        self.assertIn("C-GFLZ 19:30 (last seen 18:07, 27 NM out)", alert["text"])
+        self.assertEqual(gap_report(st, shifts, None, self.at("18:07:37"), self.at("18:22:42"), CFG)[0], None)
         # no contact-lost or eta duplicate for the same arrival afterwards
         for i in range(1, 200):
             self.assertEqual(self.poll(st, self.at("18:22:42") + dt.timedelta(seconds=30 * i), []), [])
@@ -385,6 +388,207 @@ class MissedArrival(unittest.TestCase):
         self.assertEqual(eta_datetime(sh, "19:30").isoformat(), "2026-10-20T19:30:00-04:00")
         self.assertEqual(eta_datetime(sh, "00:45").isoformat(), "2026-10-21T00:45:00-04:00")
         self.assertEqual(eta_datetime(sh, "14:50").isoformat(), "2026-10-20T14:50:00-04:00")
+
+
+WED_ARRIVALS = {"updated": "2026-10-21T11:22:00-04:00", "shift": {"date": "2026-10-21", "start": "08:00", "end": "18:30"},
+                "arrivals": [{"tail": "C-GBMI", "type": "Piper PA-31-350", "eta": "08:24"},
+                             {"tail": "C-GLEJ", "type": "Gulfstream G150", "eta": "12:45"},
+                             {"tail": "C-FDAX", "type": "Astra/G-100", "eta": "13:20"},
+                             {"tail": "C-FXAW", "type": "Westwind", "eta": "13:27"},
+                             {"tail": "C-FDND", "type": "Dash 8-100", "eta": "18:30"},
+                             {"tail": "C-GBMI", "type": "Piper PA-31-350", "eta": "18:30"}]}
+
+
+def _shift(start, end):
+    s = dt.datetime.fromisoformat(start).replace(tzinfo=TZ)
+    e = dt.datetime.fromisoformat(end).replace(tzinfo=TZ)
+    return {"id": start, "start": s, "end": e, "win_start": s - dt.timedelta(minutes=30), "win_end": e}
+
+
+WED_SHIFTS = [_shift("2026-10-20T15:00", "2026-10-21T01:30"), _shift("2026-10-21T08:00", "2026-10-21T18:30"),
+              _shift("2026-10-22T03:30", "2026-10-22T14:00")]
+
+
+def _t(s):
+    return dt.datetime.fromisoformat(s).replace(tzinfo=TZ)
+
+
+class GapResume(unittest.TestCase):
+    """Wed 2026-10-21: last poll 11:31:55, box paused until ~19:15, supervisor's next
+    loop 19:18:23 is OUTSIDE the 07:30-18:30 window. Must still alert once."""
+
+    def tracker(self, d, state):
+        from ykf import run as R
+        cfg = config.load(shared=d)
+        cfg = dict(cfg, publish=dict(cfg["publish"], enabled=False), issues=dict(cfg["issues"], enabled=False))
+        json.dump(WED_ARRIVALS, open(cfg["paths"]["arrivals"], "w"))
+        with open(cfg["paths"]["state"], "w") as f:
+            json.dump(state, f)
+        lp = max(v["last_poll"] for v in state["shifts"].values() if v.get("last_poll"))
+        m = _t(lp[:19]).timestamp()
+        os.utime(cfg["paths"]["state"], (m, m))  # last write before the pause
+        tr = R.Tracker(cfg, online=False)
+        tr.reload_arrivals()
+        return tr, cfg
+
+    def wed_state(self):  # as the deployed c504d29 left it (no covered_until yet)
+        return {"shifts": {"2026-10-20T15:00": {"alerted": {}, "tracks": {}, "last_poll": "2026-10-20T19:22:16-04:00"},
+                           "2026-10-21T08:00": {"alerted": {}, "tracks": {}, "last_poll": "2026-10-21T11:31:55-04:00"}},
+                "providers": {}}
+
+    def test_wednesday_replay_after_window_end(self):
+        with tempfile.TemporaryDirectory() as d:
+            tr, cfg = self.tracker(d, self.wed_state())
+            now = _t("2026-10-21T19:18:23")
+            gap_from = tr.gap_since(now)
+            self.assertEqual(gap_from.isoformat(), "2026-10-21T11:31:55-04:00")
+            alerts = tr.report_gap(WED_SHIFTS, gap_from, now)
+            self.assertEqual(len(alerts), 1)
+            a = alerts[0]
+            self.assertEqual(a["alert_type"], "tracker-gap")
+            self.assertEqual(a["tails"], ["C-GLEJ", "C-FDAX", "C-FXAW", "C-FDND", "C-GBMI"])
+            self.assertEqual(a["text"], "YKF tracker was not running 11:31 to 19:18 (7 h 46 min), the 08:00-18:30 shift ended meanwhile. "
+                             "5 arrivals not watched: C-GLEJ 12:45, C-FDAX 13:20, C-FXAW 13:27, C-FDND 18:30, "
+                             "C-GBMI 18:30. Check the ramp.")
+            tr.deliver(alerts)
+            self.assertEqual(os.listdir(cfg["paths"]["alerts_pending"]), [a["id"] + ".json"])
+            # once per gap, also across a restart (state saved, new process)
+            R = sys.modules["ykf.run"]
+            R.atomic_json(cfg["paths"]["state"], tr.state)
+            os.utime(cfg["paths"]["state"], (now.timestamp(), now.timestamp()))
+            tr2 = R.Tracker(cfg, online=False)
+            tr2.reload_arrivals()
+            self.assertEqual(tr2.report_gap(WED_SHIFTS, gap_from, now), [])  # same gap: never twice
+
+    def test_restart_after_window_reads_state_json(self):
+        with tempfile.TemporaryDirectory() as d:
+            st = self.wed_state()
+            st["covered_until"] = "2026-10-21T11:31:55-04:00"
+            st["next_check_by"] = "2026-10-21T11:32:25-04:00"
+            tr, cfg = self.tracker(d, st)  # fresh process, e.g. cron run-supervisor.sh after a kill
+            now = _t("2026-10-21T20:05:00")
+            alerts = tr.report_gap(WED_SHIFTS, tr.gap_since(now), now)
+            self.assertEqual(alerts[0]["tails"], ["C-GLEJ", "C-FDAX", "C-FXAW", "C-FDND", "C-GBMI"])
+
+    def test_normal_idle_sleep_and_restart_are_not_gaps(self):
+        with tempfile.TemporaryDirectory() as d:
+            tr, cfg = self.tracker(d, self.wed_state())
+            tr.mark_covered(_t("2026-10-21T20:00:00"), 600)  # idle, sleeping 10 min
+            self.assertIsNone(tr.gap_since(_t("2026-10-21T20:10:01")))
+            tr.mark_covered(_t("2026-10-21T12:00:00"))  # active, 30 s polls; 2 min restart for a deploy
+            self.assertIsNone(tr.gap_since(_t("2026-10-21T12:02:00")))
+            self.assertIsNotNone(tr.gap_since(_t("2026-10-21T12:06:00")))
+
+    def test_old_state_but_idle_loop_kept_writing_no_gap(self):
+        """Deploying over c504d29: state.json has no covered_until, but the idle loop
+        rewrote it a minute ago, so no stale 'Wednesday' alert on restart."""
+        with tempfile.TemporaryDirectory() as d:
+            tr, cfg = self.tracker(d, self.wed_state())
+            now = _t("2026-10-22T01:00:00")
+            m = (now - dt.timedelta(minutes=1)).timestamp()
+            os.utime(cfg["paths"]["state"], (m, m))
+            self.assertIsNone(tr.gap_since(now))
+
+    def test_gap_outside_any_window_logs_only(self):
+        from ykf.core import gap_report
+        st = self.wed_state()
+        alert, info = gap_report(st, WED_SHIFTS, WED_ARRIVALS, _t("2026-10-21T19:20:00"), _t("2026-10-22T02:00:00"), CFG)
+        self.assertIsNone(alert)
+        self.assertEqual(info["windows"], [])
+
+    def test_gap_mid_window_no_arrivals_due_no_alert(self):
+        from ykf.core import gap_report
+        alert, info = gap_report(self.wed_state(), WED_SHIFTS, WED_ARRIVALS, _t("2026-10-21T14:30:00"),
+                                 _t("2026-10-21T15:00:00"), CFG)
+        self.assertIsNone(alert)
+        self.assertEqual(len(info["windows"]), 1)
+
+    def test_already_alerted_arrival_not_listed(self):
+        from ykf.core import gap_report
+        st = self.wed_state()
+        st["shifts"]["2026-10-21T08:00"]["alerted"] = {"CGLEJ": "2026-10-21T11:30:00-04:00"}
+        alert, _ = gap_report(st, WED_SHIFTS, WED_ARRIVALS, _t("2026-10-21T11:31:55"), _t("2026-10-21T19:18:23"), CFG)
+        self.assertNotIn("C-GLEJ", alert["tails"])
+
+    def test_overnight_gap_then_late_listing(self):
+        """Box paused Tue 19:22 to Wed 11:07; Wed list arrived 11:22 with C-GBMI ETA 08:24."""
+        from ykf.core import gap_report, snapshot_arrivals, listed_after_gap
+        st = self.wed_state()
+        st["shifts"]["2026-10-21T08:00"] = {"alerted": {}, "tracks": {}}
+        tue_doc = {"updated": "2026-10-20T18:37:00-04:00", "shift": {"date": "2026-10-20", "start": "15:00", "end": "01:30"},
+                   "arrivals": [{"tail": "CGFLZ", "type": "B300", "eta": "18:20"}]}
+        alert, info = gap_report(st, WED_SHIFTS, tue_doc, _t("2026-10-20T19:22:16"), _t("2026-10-21T11:07:26"), CFG)
+        self.assertIsNone(alert)  # nothing known to be due yet
+        self.assertEqual([w["shift"] for w in info["windows"]], ["2026-10-20T15:00", "2026-10-21T08:00"])
+        sh = WED_SHIFTS[1]
+        self.assertTrue(snapshot_arrivals(st, sh, WED_ARRIVALS))
+        a = listed_after_gap(st, sh, _t("2026-10-21T11:22:54"), CFG)
+        self.assertEqual(a["tails"], ["C-GBMI"])
+        self.assertEqual(a["text"], "YKF tracker was not running 07:30 to 11:07; newly listed arrival due then, "
+                                    "not watched: C-GBMI 08:24. Check the ramp.")
+        self.assertIsNone(listed_after_gap(st, sh, _t("2026-10-21T11:23:24"), CFG))
+        self.assertFalse(snapshot_arrivals(st, sh, tue_doc))  # other shift's list is not snapshotted
+
+
+class PendingAlerts(unittest.TestCase):
+    def setUp(self):
+        from ykf import run as R
+        self.R = R
+        self.d = tempfile.mkdtemp()
+        cfg = config.load(shared=self.d)
+        self.cfg = dict(cfg, publish=dict(cfg["publish"], enabled=False), issues=dict(cfg["issues"], enabled=True))
+        os.makedirs(self.cfg["paths"]["alerts_pending"])
+        self.tr = R.Tracker(self.cfg, online=False)
+
+    def put(self, name, **kw):
+        a = {"id": name, "created": "2026-10-20T19:16:45-04:00", "text": "Skycare C-FDAX (PHX58) Astra inbound"}
+        a.update(kw)
+        json.dump(a, open(os.path.join(self.cfg["paths"]["alerts_pending"], name + ".json"), "w"))
+
+    def test_cfdax_stale_is_archived_not_deleted(self):
+        self.put("c00804-1792535082-inbound", issue=4)
+        self.tr.recheck_pending(_t("2026-10-22T00:53:00"))
+        self.assertEqual(os.listdir(self.cfg["paths"]["alerts_pending"]), [])
+        stale = os.path.join(self.d, "alerts", "stale", "c00804-1792535082-inbound.json")
+        a = json.load(open(stale))
+        self.assertEqual(a["issue"], 4)
+        self.assertIn("undelivered after 29 h", a["archive_reason"])
+
+    def test_open_issue_rewakes_tower_twice_max(self):
+        from ykf import github as G
+        calls = []
+        old = (G.issue_state, G.rewake)
+        G.issue_state = lambda cfg, n: "OPEN"
+        G.rewake = lambda cfg, n: calls.append(n)
+        try:
+            self.put("x", issue=4)
+            t = _t("2026-10-20T19:28:00")
+            for i in range(6):
+                self.tr.last_pending_check = 0
+                self.tr.recheck_pending(t + dt.timedelta(minutes=31 * i))
+            self.assertEqual(calls, [4, 4])
+        finally:
+            G.issue_state, G.rewake = old
+
+    def test_too_early_no_rewake(self):
+        from ykf import github as G
+        old = (G.issue_state, G.rewake)
+        G.issue_state = lambda cfg, n: self.fail("should not check yet")
+        try:
+            self.put("x", issue=4)
+            self.tr.recheck_pending(_t("2026-10-20T19:20:00"))
+        finally:
+            G.issue_state, G.rewake = old
+
+    def test_missing_issue_is_retried(self):
+        opened = []
+        self.tr.open_issue = lambda alerts: opened.append([a["id"] for a in alerts])
+        self.put("y")
+        self.tr.recheck_pending(_t("2026-10-20T19:20:00"))
+        self.assertEqual(opened, [["y"]])
+        self.tr.last_pending_check = 0
+        self.tr.recheck_pending(_t("2026-10-20T19:22:00"))  # within 10 min: no second try
+        self.assertEqual(len(opened), 1)
 
 
 class FeedsRobust(unittest.TestCase):

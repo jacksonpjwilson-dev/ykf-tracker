@@ -57,7 +57,10 @@ DEFAULTS = {
     "eta_warn_noadsb_min": 20,   # never seen / flagged no-ADS-B: ETA-based heads-up this early
     "eta_late_grace_min": 10,    # ETA already this far past when first listed -> late add, no ETA alert
     "no_adsb_tails": [],         # tails known not to broadcast ADS-B (or "adsb": false in arrivals.json)
-    "catchup_max_s": 1800,       # stop all-provider catch-up for a track not seen for this long
+    "catchup_max_s": 1800,
+    "pending_check_every_s": 120,  # look at alerts/pending this often (every loop, idle too)
+    "redeliver_after_s": 600,      # alert still pending with its issue open -> re-assign to wake Tower (max 2)
+    "pending_stale_s": 10800,      # pending this long -> archived to alerts/stale (never deleted)       # stop all-provider catch-up for a track not seen for this long
     "feed_stale_alert_s": 300,   # every feed failing this long -> tracker-health alert
     "catchup_every_s": 60,       # extra all-provider hex lookup for watched tails when one is lost/after a gap
     "feed_timeout_s": 10,        # per socket operation
