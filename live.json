@@ -1,0 +1,42 @@
+{
+ "generated": "2026-10-24T12:23:25-04:00",
+ "airport": "CYKF",
+ "radius_nm": 10.0,
+ "active": true,
+ "shift": {
+  "id": "2026-10-24T05:00",
+  "start": "2026-10-24T05:00:00-04:00",
+  "end": "2026-10-24T15:30:00-04:00",
+  "window_start": "2026-10-24T04:30:00-04:00",
+  "window_end": "2026-10-24T15:30:00-04:00"
+ },
+ "arrivals_updated": "2026-10-22T06:05:00-04:00",
+ "arrivals_stale": true,
+ "feed": {
+  "provider": "adsb.lol",
+  "ok": true
+ },
+ "next_window": null,
+ "rows": [
+  {
+   "tail": "C-GBMI",
+   "type": "Piper PA-31-350",
+   "eta": "06:15",
+   "dist_nm": null,
+   "alt": null,
+   "last_seen": null,
+   "status": "expected",
+   "scheduled": true
+  },
+  {
+   "tail": "N75SR",
+   "type": "Learjet 75 XR",
+   "eta": null,
+   "dist_nm": null,
+   "alt": null,
+   "last_seen": null,
+   "status": "expected",
+   "scheduled": true
+  }
+ ]
+}
