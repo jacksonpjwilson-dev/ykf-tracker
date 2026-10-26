@@ -50,6 +50,7 @@ DEFAULTS = {
     "lost_after_s": 300,
     # Blind-spot safety net (see core.safety_net / README "Missed arrivals").
     "gap_alert_s": 300,          # no good poll for this long = tracker was blind (box paused, feed down)
+    "gap_blind_window_s": 3600,  # blind this long inside a shift window -> tracker-gap alert even with no listed arrival due (no list / Skycare)
     "gap_recent_s": 600,         # how long after a gap a ground sighting at the field still counts as missed
     "landed_nm": 3,              # 'on the ground at the field'
     "lost_inbound_nm": 40,       # contact lost while heading in within this range -> alert

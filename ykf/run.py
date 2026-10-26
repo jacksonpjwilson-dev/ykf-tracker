@@ -22,7 +22,7 @@ import urllib.request
 import zipfile
 
 from . import config as config_mod
-from .core import (build_watch, covered_until, gap_report, listed_after_gap, live_rows, load_arrivals,
+from .core import (arrivals_match_shift, build_watch, covered_until, gap_report, listed_after_gap, live_rows, load_arrivals,
                    load_skycare, safety_net, snapshot_arrivals, step)
 from .timeutil import parse_iso
 from .feeds import FeedError, Feeds
@@ -89,7 +89,11 @@ class Tracker:
         self.feeds = Feeds(cfg, self.state)
         self._arr_mtime = None
         self.arrivals_doc = {"arrivals": []}
+        self.file_doc = dict(self.EMPTY_DOC)
         self.watch = {"by_hex": {}, "by_tail": {}}
+        self.file_watch = {"by_hex": {}, "by_tail": {}}
+        self._arr_checked = None
+        self.arrivals_ignored = False
         self.problems = []
         self.last_publish = 0
         self.last_fleet = 0
@@ -101,17 +105,39 @@ class Tracker:
         self.last_poll_wall = None
         self.last_pending_check = 0
 
-    def reload_arrivals(self):
+    EMPTY_DOC = {"updated": None, "shift": None, "arrivals": []}
+
+    def reload_arrivals(self, shift=None):
+        """Read arrivals.json when it changes (file_doc / file_watch). With a shift,
+        only use it if it is for THAT shift; an older shift's list (Sat 2026-10-24
+        got the 10-22 list, C-GBMI 06:15 as a 'late add') is ignored and the shift
+        runs with no list, logged once per file version and shift."""
         p = self.cfg["paths"]["arrivals"]
         m = os.path.getmtime(p) if os.path.exists(p) else None
         if m != self._arr_mtime:
             self._arr_mtime = m
-            self.arrivals_doc, self.problems = load_arrivals(p)
-            self.watch = build_watch(self.arrivals_doc["arrivals"], self.resolver, online=self.online)
+            self._arr_checked = None
+            self.file_doc, self.problems = load_arrivals(p)
+            self.file_watch = build_watch(self.file_doc["arrivals"], self.resolver, online=self.online)
             log(self.cfg, "watch list: %d arrivals (%s)%s" % (
-                len(self.watch["by_tail"]),
-                ", ".join("%s=%s" % (t, e["hex"] or "?") for t, e in self.watch["by_tail"].items()),
+                len(self.file_watch["by_tail"]),
+                ", ".join("%s=%s" % (t, e["hex"] or "?") for t, e in self.file_watch["by_tail"].items()),
                 (" problems: " + "; ".join(self.problems)) if self.problems else ""))
+        if shift is None or arrivals_match_shift(self.file_doc, shift):
+            self.arrivals_doc, self.watch = self.file_doc, self.file_watch
+            self.arrivals_ignored = False
+            return True
+        self.arrivals_doc = dict(self.EMPTY_DOC)
+        self.watch = {"by_hex": {}, "by_tail": {}}
+        self.arrivals_ignored = True
+        if self._arr_checked != shift["id"]:
+            self._arr_checked = shift["id"]
+            ds = self.file_doc.get("shift") or {}
+            log(self.cfg, "arrivals.json IGNORED: it is for shift %s %s (updated %s), not the current shift %s; "
+                          "running this shift with NO arrivals list (no watch list, no late adds)" % (
+                              ds.get("date") or "?", ds.get("start") or "?", self.file_doc.get("updated") or "?",
+                              shift["start"].strftime("%Y-%m-%d %H:%M")))
+        return False
 
     def _needs_catchup(self, shift, t):
         """Gap since the last good poll, or a watched arrival lost while heading in."""
@@ -177,7 +203,7 @@ class Tracker:
         return None
 
     def report_gap(self, shifts, gap_from, t):
-        alert, info = gap_report(self.state, shifts, self.arrivals_doc, gap_from, t, self.cfg)
+        alert, info = gap_report(self.state, shifts, self.file_doc, gap_from, t, self.cfg)
         if info["s"] >= self.cfg["gap_alert_s"]:
             log(self.cfg, "TRACKER GAP: not running %s to %s (%d min); overlapped %s; %d arrival(s) due in it" % (
                 info["from"], info["to"], round(info["s"] / 60.0),
@@ -248,10 +274,10 @@ class Tracker:
                     log(self.cfg, "re-wake check failed for issue #%s: %s" % (a.get("issue"), e))
 
     def poll(self, shift, shifts=None, gap_from=None):
-        self.reload_arrivals()
+        self.reload_arrivals(shift)
         t = tnow()
         late_gap = None
-        if snapshot_arrivals(self.state, shift, self.arrivals_doc):
+        if snapshot_arrivals(self.state, shift, self.file_doc):
             late_gap = listed_after_gap(self.state, shift, t, self.cfg)
         wall = time.time()
         if self.last_poll_wall and wall - self.last_poll_wall >= self.cfg["gap_alert_s"]:

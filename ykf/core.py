@@ -509,7 +509,40 @@ def gap_report(state, shifts, cur_doc, gap_from, now, cfg):
                 first = first or shf
     info["missed"] = missed
     if not missed:
-        return None, info
+        # Nothing known to be due, but a long blind stretch inside a window is still
+        # worth one alert: with no list for the shift (Sat 2026-10-24: arrivals.json
+        # was still the 10-22 list) or for unscheduled Skycare traffic.
+        long_w = [w for w in info["windows"]
+                  if (_dt(w["blind_to"]) - _dt(w["blind_from"])).total_seconds() >= cfg.get("gap_blind_window_s", 3600)]
+        if not long_w:
+            return None, info
+        parts, lists = [], []
+        for w in long_w:
+            shf_w = [x for x in shifts if x["id"] == w["shift"]][0]
+            has = state["shifts"][shf_w["id"]].get("arrivals") is not None or bool(cur_doc and arrivals_match_shift(cur_doc, shf_w))
+            lists.append(has)
+            b0w, b1w = _dt(w["blind_from"]), _dt(w["blind_to"])
+            parts.append("%s %s to %s (%s, %s)" % (
+                "%s %s-%s shift" % (shf_w["start"].strftime("%a"), shf_w["start"].strftime("%H:%M"), shf_w["end"].strftime("%H:%M")),
+                hhmm(b0w), hhmm(b1w), _fmt_dur((b1w - b0w).total_seconds()),
+                "no listed arrival due, Skycare and late adds not watched" if has else "no arrivals list for this shift, nothing watched"))
+        shf = [x for x in shifts if x["id"] == long_w[0]["shift"]][0]
+        has_list = lists[0]
+        ended = now >= shf["win_end"]
+        text = "YKF tracker was not running %s to %s (%s)%s. Blind in: %s. Check the ramp." % (
+            hhmm(gap_from), hhmm(now), _fmt_dur(info["s"]),
+            ", the %s-%s shift ended meanwhile" % (shf["start"].strftime("%H:%M"), shf["end"].strftime("%H:%M")) if ended else "",
+            "; ".join(parts))
+        alert = {
+            "id": "gap-%s" % gap_from.strftime("%Y%m%dT%H%M%S"), "alert_type": "tracker-gap",
+            "created": iso(now), "time": hhmm(now),
+            "shift": {"id": shf["id"], "start": iso(shf["start"]), "end": iso(shf["end"])},
+            "tail": "", "type": "", "distance_nm": None, "altitude_ft": None, "eta": "", "tails": [], "missed": [],
+            "has_list": has_list,
+            "gap": {"from": info["from"], "to": info["to"], "minutes": round(info["s"] / 60.0)},
+            "text": text, "sms_text": text[:160], "channel_hint": "in-app", "delivered": False,
+        }
+        return alert, info
     missed.sort(key=lambda m: (m["eta"] or "99:99"))
     names = ", ".join("%s%s%s" % (m["tail"], " " + m["eta"] if m["eta"] else "",
                                   " (last seen %s, %.0f NM out)" % (hhmm(_dt(m["last_seen"])), m["dist_nm"]) if m.get("last_seen") else "")
