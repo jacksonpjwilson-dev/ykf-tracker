@@ -16,5 +16,5 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
-      - run: pip install pytest $( [ -f requirements.txt ] && echo -r requirements.txt )
+      - run: pip install pytest icalendar recurring-ical-events
       - run: PYTHONPATH=. python -m pytest -q tests
