@@ -1,5 +1,6 @@
 import AppIntents
 import Foundation
+import UIKit
 
 enum ArrivalDestination: String, AppEnum {
     case arrivals, next, nearby, health, shifts, alerts
@@ -13,7 +14,7 @@ struct ShowArrivalsIntent: AppIntent {
     static var description = IntentDescription("Read the latest cached backend publication. Does not query ADS-B providers.")
     static var openAppWhenRun = true
     @Parameter(title: "View", default: .arrivals) var destination: ArrivalDestination
-    func perform() async throws -> some IntentResult & ProvidesDialog & OpensIntent {
+    @MainActor func perform() async throws -> some IntentResult & ProvidesDialog {
         let snapshot = SharedCache.read()
         let flights = snapshot?.flights ?? []
         let text: String
@@ -28,17 +29,19 @@ struct ShowArrivalsIntent: AppIntent {
         case .shifts: route = "shifts"; text = "Next monitoring window: \(Format.time(snapshot?.next_window?.window_start))."
         case .alerts: route = "alerts"; text = "Opening received arrival alerts."
         }
-        return .result(opensIntent: OpenURLIntent(URL(string: "ykf://\(route)")!), dialog: IntentDialog(stringLiteral: "\(text) Publication: \(Format.time(snapshot?.generated))."))
+        await UIApplication.shared.open(URL(string: "ykf://\(route)")!)
+        return .result(dialog: IntentDialog(stringLiteral: "\(text) Publication: \(Format.time(snapshot?.generated))."))
     }
 }
 struct OpenAircraftIntent: AppIntent {
     static var title: LocalizedStringResource = "Open tracked YKF aircraft"
     static var openAppWhenRun = true
     @Parameter(title: "Registration") var registration: String
-    func perform() async throws -> some IntentResult & OpensIntent {
+    @MainActor func perform() async throws -> some IntentResult {
         let tail = SharedCache.read()?.flights.first { $0.tail.caseInsensitiveCompare(registration) == .orderedSame }?.tail
         let route = tail.map { "ykf://flight/\($0.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? "")" } ?? "ykf://arrivals"
-        return .result(opensIntent: OpenURLIntent(URL(string: route)!))
+        await UIApplication.shared.open(URL(string: route)!)
+        return .result()
     }
 }
 struct YKFShortcuts: AppShortcutsProvider {
