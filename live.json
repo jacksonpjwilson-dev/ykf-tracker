@@ -1,0 +1,34 @@
+{
+ "generated": "2026-11-12T06:25:22-05:00",
+ "airport": "CYKF",
+ "radius_nm": 10.0,
+ "active": true,
+ "shift": {
+  "id": "2026-11-12T03:30",
+  "start": "2026-11-12T03:30:00-05:00",
+  "end": "2026-11-12T14:00:00-05:00",
+  "window_start": "2026-11-12T03:00:00-05:00",
+  "window_end": "2026-11-12T14:00:00-05:00"
+ },
+ "arrivals_updated": null,
+ "arrivals_stale": true,
+ "feed": {
+  "provider": "adsb.lol",
+  "ok": true
+ },
+ "next_window": null,
+ "rows": [
+  {
+   "tail": "PHX706",
+   "type": "",
+   "eta": null,
+   "scheduled": false,
+   "dist_nm": 126.9,
+   "alt": "6,150 ft",
+   "last_seen": "2026-11-12T04:45:39-05:00",
+   "status": "lost signal",
+   "alerted_at": null,
+   "note": "unscheduled"
+  }
+ ]
+}
