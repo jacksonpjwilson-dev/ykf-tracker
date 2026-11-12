@@ -1,0 +1,270 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 56;
+	objects = {
+		F6015AA8C5AF70A4B8E4D3BF = {
+			isa = "PBXFileReference";
+			explicitFileType = "wrapper.application";
+			path = "YKFArrivals.app";
+			sourceTree = "BUILT_PRODUCTS_DIR";
+		};
+		644032F41F2325C223F95B82 = {
+			isa = "PBXFileReference";
+			lastKnownFileType = "sourcecode.swift";
+			path = "Shared/Models.swift";
+			sourceTree = "SOURCE_ROOT";
+		};
+		8D9E54D23FDD3B37E97ED713 = {
+			isa = "PBXBuildFile";
+			fileRef = 644032F41F2325C223F95B82;
+		};
+		685CDE935D32B25686CEBF15 = {
+			isa = "PBXFileReference";
+			lastKnownFileType = "sourcecode.swift";
+			path = "Shared/SharedCache.swift";
+			sourceTree = "SOURCE_ROOT";
+		};
+		7F68CCE8B5368EF1BEB68849 = {
+			isa = "PBXBuildFile";
+			fileRef = 685CDE935D32B25686CEBF15;
+		};
+		3C9A2D0CD7047EF6B167AAC5 = {
+			isa = "PBXFileReference";
+			lastKnownFileType = "sourcecode.swift";
+			path = "Shared/BackendClient.swift";
+			sourceTree = "SOURCE_ROOT";
+		};
+		25FE64C7531B577C99B9EC62 = {
+			isa = "PBXBuildFile";
+			fileRef = 3C9A2D0CD7047EF6B167AAC5;
+		};
+		F02006E200E97E7D7BE8950D = {
+			isa = "PBXFileReference";
+			lastKnownFileType = "sourcecode.swift";
+			path = "Shared/ArrivalActivity.swift";
+			sourceTree = "SOURCE_ROOT";
+		};
+		4BE0162DDA7EDB9866BB55D2 = {
+			isa = "PBXBuildFile";
+			fileRef = F02006E200E97E7D7BE8950D;
+		};
+		9E68A1FE8F073C1D3E9F35D8 = {
+			isa = "PBXFileReference";
+			lastKnownFileType = "sourcecode.swift";
+			path = "Shared/ArrivalIntents.swift";
+			sourceTree = "SOURCE_ROOT";
+		};
+		CC10D296C73D43E52F94B9D2 = {
+			isa = "PBXBuildFile";
+			fileRef = 9E68A1FE8F073C1D3E9F35D8;
+		};
+		0767C7E17CCA24668BE1F1DE = {
+			isa = "PBXFileReference";
+			lastKnownFileType = "sourcecode.swift";
+			path = "YKFArrivals/LiveArrival.swift";
+			sourceTree = "SOURCE_ROOT";
+		};
+		3F3971E7184FF48FA8183DE8 = {
+			isa = "PBXBuildFile";
+			fileRef = 0767C7E17CCA24668BE1F1DE;
+		};
+		BBAB1B66A6825204A91A2ABD = {
+			isa = "PBXFileReference";
+			lastKnownFileType = "sourcecode.swift";
+			path = "YKFArrivals/Notifications.swift";
+			sourceTree = "SOURCE_ROOT";
+		};
+		73DDC7B158F5D25023EC82C0 = {
+			isa = "PBXBuildFile";
+			fileRef = BBAB1B66A6825204A91A2ABD;
+		};
+		657332BFA0FF75E3992B0CCC = {
+			isa = "PBXFileReference";
+			lastKnownFileType = "sourcecode.swift";
+			path = "YKFArrivals/Store.swift";
+			sourceTree = "SOURCE_ROOT";
+		};
+		93C7E100794C0B9246887CD2 = {
+			isa = "PBXBuildFile";
+			fileRef = 657332BFA0FF75E3992B0CCC;
+		};
+		57382EB5255E905767B952F5 = {
+			isa = "PBXFileReference";
+			lastKnownFileType = "sourcecode.swift";
+			path = "YKFArrivals/Views.swift";
+			sourceTree = "SOURCE_ROOT";
+		};
+		DD1E165BCDC4F8561EA7FBCF = {
+			isa = "PBXBuildFile";
+			fileRef = 57382EB5255E905767B952F5;
+		};
+		7D77DB4B1AEA3CE92B2EC32B = {
+			isa = "PBXFileReference";
+			lastKnownFileType = "sourcecode.swift";
+			path = "YKFArrivals/WatchBridge.swift";
+			sourceTree = "SOURCE_ROOT";
+		};
+		55C2C253E9079B3D198B02C7 = {
+			isa = "PBXBuildFile";
+			fileRef = 7D77DB4B1AEA3CE92B2EC32B;
+		};
+		F871463D201E6DB09519D862 = {
+			isa = "PBXFileReference";
+			lastKnownFileType = "sourcecode.swift";
+			path = "YKFArrivals/YKFArrivalsApp.swift";
+			sourceTree = "SOURCE_ROOT";
+		};
+		468847899C198836E5E39319 = {
+			isa = "PBXBuildFile";
+			fileRef = F871463D201E6DB09519D862;
+		};
+		08182DA1BB7020C0EA03BDCC = {
+			isa = "PBXSourcesBuildPhase";
+			buildActionMask = 2147483647;
+			files = (8D9E54D23FDD3B37E97ED713, 7F68CCE8B5368EF1BEB68849, 25FE64C7531B577C99B9EC62, 4BE0162DDA7EDB9866BB55D2, CC10D296C73D43E52F94B9D2, 3F3971E7184FF48FA8183DE8, 73DDC7B158F5D25023EC82C0, 93C7E100794C0B9246887CD2, DD1E165BCDC4F8561EA7FBCF, 55C2C253E9079B3D198B02C7, 468847899C198836E5E39319);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		266847871E29F25182C54C70 = {
+			isa = "PBXFrameworksBuildPhase";
+			buildActionMask = 2147483647;
+			files = ();
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		9C60020D65114330524951C5 = {
+			isa = "PBXFileReference";
+			lastKnownFileType = "folder.assetcatalog";
+			path = "YKFArrivals/Assets.xcassets";
+			sourceTree = "SOURCE_ROOT";
+		};
+		D83BF327D8FF2FCA583DC8B7 = {
+			isa = "PBXBuildFile";
+			fileRef = 9C60020D65114330524951C5;
+		};
+		AFF01289B7394EAB655BC9F1 = {
+			isa = "PBXResourcesBuildPhase";
+			buildActionMask = 2147483647;
+			files = (D83BF327D8FF2FCA583DC8B7);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		7D79237E3CBAB1E0C3AFBB34 = {
+			isa = "XCBuildConfiguration";
+			buildSettings = {
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				PRODUCT_BUNDLE_IDENTIFIER = "dev.jacksonwilson.ykfarrivals";
+				INFOPLIST_FILE = "YKFArrivals/Info.plist";
+				GENERATE_INFOPLIST_FILE = "NO";
+				SDKROOT = "iphoneos";
+				SWIFT_VERSION = "5.0";
+				CODE_SIGN_STYLE = "Automatic";
+				TARGETED_DEVICE_FAMILY = "1";
+				MARKETING_VERSION = "1.0";
+				CURRENT_PROJECT_VERSION = "1";
+				SWIFT_EMIT_LOC_STRINGS = "YES";
+				ENABLE_USER_SCRIPT_SANDBOXING = "YES";
+				ASSETCATALOG_COMPILER_APPICON_NAME = "AppIcon";
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "DEBUG BASIC_APP";
+				IPHONEOS_DEPLOYMENT_TARGET = "17.0";
+				DEBUG_INFORMATION_FORMAT = "dwarf";
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+			};
+			name = "Debug";
+		};
+		0676C768D5AA2C1DB7F0070C = {
+			isa = "XCBuildConfiguration";
+			buildSettings = {
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				PRODUCT_BUNDLE_IDENTIFIER = "dev.jacksonwilson.ykfarrivals";
+				INFOPLIST_FILE = "YKFArrivals/Info.plist";
+				GENERATE_INFOPLIST_FILE = "NO";
+				SDKROOT = "iphoneos";
+				SWIFT_VERSION = "5.0";
+				CODE_SIGN_STYLE = "Automatic";
+				TARGETED_DEVICE_FAMILY = "1";
+				MARKETING_VERSION = "1.0";
+				CURRENT_PROJECT_VERSION = "1";
+				SWIFT_EMIT_LOC_STRINGS = "YES";
+				ENABLE_USER_SCRIPT_SANDBOXING = "YES";
+				ASSETCATALOG_COMPILER_APPICON_NAME = "AppIcon";
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "BASIC_APP";
+				IPHONEOS_DEPLOYMENT_TARGET = "17.0";
+				SWIFT_COMPILATION_MODE = "wholemodule";
+			};
+			name = "Release";
+		};
+		43060E0AFC1AB809DA562F7D = {
+			isa = "XCConfigurationList";
+			buildConfigurations = (7D79237E3CBAB1E0C3AFBB34, 0676C768D5AA2C1DB7F0070C);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = "Release";
+		};
+		B3B3021104225DD8BBABD243 = {
+			isa = "PBXNativeTarget";
+			buildConfigurationList = 43060E0AFC1AB809DA562F7D;
+			buildPhases = (08182DA1BB7020C0EA03BDCC, 266847871E29F25182C54C70, AFF01289B7394EAB655BC9F1);
+			buildRules = ();
+			dependencies = ();
+			name = "YKFArrivals";
+			productName = "YKFArrivals";
+			productReference = F6015AA8C5AF70A4B8E4D3BF;
+			productType = "com.apple.product-type.application";
+		};
+		FBDC4F23F93125BBEEAE800C = {
+			isa = "PBXGroup";
+			children = (F6015AA8C5AF70A4B8E4D3BF);
+			name = "Products";
+			sourceTree = "<group>";
+		};
+		B28B7AF69320201D1CF206EB = {
+			isa = "PBXGroup";
+			children = (644032F41F2325C223F95B82, 685CDE935D32B25686CEBF15, 3C9A2D0CD7047EF6B167AAC5, F02006E200E97E7D7BE8950D, 9E68A1FE8F073C1D3E9F35D8, 0767C7E17CCA24668BE1F1DE, BBAB1B66A6825204A91A2ABD, 657332BFA0FF75E3992B0CCC, 57382EB5255E905767B952F5, 7D77DB4B1AEA3CE92B2EC32B, F871463D201E6DB09519D862, 9C60020D65114330524951C5, FBDC4F23F93125BBEEAE800C);
+			sourceTree = "<group>";
+		};
+		877A6BA951A2EA0025A2ABE8 = {
+			isa = "XCBuildConfiguration";
+			buildSettings = {
+				CLANG_ENABLE_MODULES = "YES";
+				SWIFT_VERSION = "5.0";
+				DEBUG_INFORMATION_FORMAT = "dwarf";
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "DEBUG BASIC_APP";
+			};
+			name = "Debug";
+		};
+		959134B361DD7E21ADEA3164 = {
+			isa = "XCBuildConfiguration";
+			buildSettings = {
+				CLANG_ENABLE_MODULES = "YES";
+				SWIFT_VERSION = "5.0";
+				SWIFT_COMPILATION_MODE = "wholemodule";
+			};
+			name = "Release";
+		};
+		247BF104A9AD002C539DA531 = {
+			isa = "XCConfigurationList";
+			buildConfigurations = (877A6BA951A2EA0025A2ABE8, 959134B361DD7E21ADEA3164);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = "Release";
+		};
+		98F54143AB4E86B28C3AFEE0 = {
+			isa = "PBXProject";
+			attributes = {
+				LastUpgradeCheck = "1600";
+				BuildIndependentTargetsInParallel = "YES";
+			};
+			buildConfigurationList = 247BF104A9AD002C539DA531;
+			compatibilityVersion = "Xcode 14.0";
+			developmentRegion = "en";
+			hasScannedForEncodings = 0;
+			knownRegions = ("en", "Base");
+			mainGroup = B28B7AF69320201D1CF206EB;
+			productRefGroup = FBDC4F23F93125BBEEAE800C;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (B3B3021104225DD8BBABD243);
+		};
+	};
+	rootObject = 98F54143AB4E86B28C3AFEE0;
+}

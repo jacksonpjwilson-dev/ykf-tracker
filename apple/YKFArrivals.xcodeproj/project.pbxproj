@@ -1,0 +1,678 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 56;
+	objects = {
+		F6015AA8C5AF70A4B8E4D3BF = {
+			isa = "PBXFileReference";
+			explicitFileType = "wrapper.application";
+			path = "YKFArrivals.app";
+			sourceTree = "BUILT_PRODUCTS_DIR";
+		};
+		644032F41F2325C223F95B82 = {
+			isa = "PBXFileReference";
+			lastKnownFileType = "sourcecode.swift";
+			path = "Shared/Models.swift";
+			sourceTree = "SOURCE_ROOT";
+		};
+		8D9E54D23FDD3B37E97ED713 = {
+			isa = "PBXBuildFile";
+			fileRef = 644032F41F2325C223F95B82;
+		};
+		685CDE935D32B25686CEBF15 = {
+			isa = "PBXFileReference";
+			lastKnownFileType = "sourcecode.swift";
+			path = "Shared/SharedCache.swift";
+			sourceTree = "SOURCE_ROOT";
+		};
+		7F68CCE8B5368EF1BEB68849 = {
+			isa = "PBXBuildFile";
+			fileRef = 685CDE935D32B25686CEBF15;
+		};
+		3C9A2D0CD7047EF6B167AAC5 = {
+			isa = "PBXFileReference";
+			lastKnownFileType = "sourcecode.swift";
+			path = "Shared/BackendClient.swift";
+			sourceTree = "SOURCE_ROOT";
+		};
+		25FE64C7531B577C99B9EC62 = {
+			isa = "PBXBuildFile";
+			fileRef = 3C9A2D0CD7047EF6B167AAC5;
+		};
+		F02006E200E97E7D7BE8950D = {
+			isa = "PBXFileReference";
+			lastKnownFileType = "sourcecode.swift";
+			path = "Shared/ArrivalActivity.swift";
+			sourceTree = "SOURCE_ROOT";
+		};
+		4BE0162DDA7EDB9866BB55D2 = {
+			isa = "PBXBuildFile";
+			fileRef = F02006E200E97E7D7BE8950D;
+		};
+		9E68A1FE8F073C1D3E9F35D8 = {
+			isa = "PBXFileReference";
+			lastKnownFileType = "sourcecode.swift";
+			path = "Shared/ArrivalIntents.swift";
+			sourceTree = "SOURCE_ROOT";
+		};
+		CC10D296C73D43E52F94B9D2 = {
+			isa = "PBXBuildFile";
+			fileRef = 9E68A1FE8F073C1D3E9F35D8;
+		};
+		0767C7E17CCA24668BE1F1DE = {
+			isa = "PBXFileReference";
+			lastKnownFileType = "sourcecode.swift";
+			path = "YKFArrivals/LiveArrival.swift";
+			sourceTree = "SOURCE_ROOT";
+		};
+		3F3971E7184FF48FA8183DE8 = {
+			isa = "PBXBuildFile";
+			fileRef = 0767C7E17CCA24668BE1F1DE;
+		};
+		BBAB1B66A6825204A91A2ABD = {
+			isa = "PBXFileReference";
+			lastKnownFileType = "sourcecode.swift";
+			path = "YKFArrivals/Notifications.swift";
+			sourceTree = "SOURCE_ROOT";
+		};
+		73DDC7B158F5D25023EC82C0 = {
+			isa = "PBXBuildFile";
+			fileRef = BBAB1B66A6825204A91A2ABD;
+		};
+		657332BFA0FF75E3992B0CCC = {
+			isa = "PBXFileReference";
+			lastKnownFileType = "sourcecode.swift";
+			path = "YKFArrivals/Store.swift";
+			sourceTree = "SOURCE_ROOT";
+		};
+		93C7E100794C0B9246887CD2 = {
+			isa = "PBXBuildFile";
+			fileRef = 657332BFA0FF75E3992B0CCC;
+		};
+		57382EB5255E905767B952F5 = {
+			isa = "PBXFileReference";
+			lastKnownFileType = "sourcecode.swift";
+			path = "YKFArrivals/Views.swift";
+			sourceTree = "SOURCE_ROOT";
+		};
+		DD1E165BCDC4F8561EA7FBCF = {
+			isa = "PBXBuildFile";
+			fileRef = 57382EB5255E905767B952F5;
+		};
+		7D77DB4B1AEA3CE92B2EC32B = {
+			isa = "PBXFileReference";
+			lastKnownFileType = "sourcecode.swift";
+			path = "YKFArrivals/WatchBridge.swift";
+			sourceTree = "SOURCE_ROOT";
+		};
+		55C2C253E9079B3D198B02C7 = {
+			isa = "PBXBuildFile";
+			fileRef = 7D77DB4B1AEA3CE92B2EC32B;
+		};
+		F871463D201E6DB09519D862 = {
+			isa = "PBXFileReference";
+			lastKnownFileType = "sourcecode.swift";
+			path = "YKFArrivals/YKFArrivalsApp.swift";
+			sourceTree = "SOURCE_ROOT";
+		};
+		468847899C198836E5E39319 = {
+			isa = "PBXBuildFile";
+			fileRef = F871463D201E6DB09519D862;
+		};
+		08182DA1BB7020C0EA03BDCC = {
+			isa = "PBXSourcesBuildPhase";
+			buildActionMask = 2147483647;
+			files = (8D9E54D23FDD3B37E97ED713, 7F68CCE8B5368EF1BEB68849, 25FE64C7531B577C99B9EC62, 4BE0162DDA7EDB9866BB55D2, CC10D296C73D43E52F94B9D2, 3F3971E7184FF48FA8183DE8, 73DDC7B158F5D25023EC82C0, 93C7E100794C0B9246887CD2, DD1E165BCDC4F8561EA7FBCF, 55C2C253E9079B3D198B02C7, 468847899C198836E5E39319);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		266847871E29F25182C54C70 = {
+			isa = "PBXFrameworksBuildPhase";
+			buildActionMask = 2147483647;
+			files = ();
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		9C60020D65114330524951C5 = {
+			isa = "PBXFileReference";
+			lastKnownFileType = "folder.assetcatalog";
+			path = "YKFArrivals/Assets.xcassets";
+			sourceTree = "SOURCE_ROOT";
+		};
+		D83BF327D8FF2FCA583DC8B7 = {
+			isa = "PBXBuildFile";
+			fileRef = 9C60020D65114330524951C5;
+		};
+		AFF01289B7394EAB655BC9F1 = {
+			isa = "PBXResourcesBuildPhase";
+			buildActionMask = 2147483647;
+			files = (D83BF327D8FF2FCA583DC8B7);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		7FE508C7C296DCF1579D6206 = {
+			isa = "PBXContainerItemProxy";
+			containerPortal = 98F54143AB4E86B28C3AFEE0;
+			proxyType = 1;
+			remoteGlobalIDString = E8F217167D267D8A3BE2D64D;
+			remoteInfo = "YKFWidgets";
+		};
+		40A9C412913BDB0E9B743BD7 = {
+			isa = "PBXTargetDependency";
+			target = E8F217167D267D8A3BE2D64D;
+			targetProxy = 7FE508C7C296DCF1579D6206;
+		};
+		776DA7B10E5F26C58495C267 = {
+			isa = "PBXBuildFile";
+			fileRef = DF3988557AA62A8666F1F604;
+			settings = {
+				ATTRIBUTES = ("RemoveHeadersOnCopy");
+			};
+		};
+		63CC36BD8FC58BEE9E0DEE6F = {
+			isa = "PBXCopyFilesBuildPhase";
+			buildActionMask = 2147483647;
+			dstPath = "";
+			dstSubfolderSpec = 13;
+			files = (776DA7B10E5F26C58495C267);
+			name = "Embed YKFWidgets";
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		D679F5CE72FA227B92956A7F = {
+			isa = "PBXContainerItemProxy";
+			containerPortal = 98F54143AB4E86B28C3AFEE0;
+			proxyType = 1;
+			remoteGlobalIDString = 6DF0B395652CEF2E1F336C70;
+			remoteInfo = "YKFWatch";
+		};
+		32A1EBC9E77550907591A4CF = {
+			isa = "PBXTargetDependency";
+			target = 6DF0B395652CEF2E1F336C70;
+			targetProxy = D679F5CE72FA227B92956A7F;
+		};
+		9D9908E596EAD15426050E41 = {
+			isa = "PBXBuildFile";
+			fileRef = 87088323961C745C783DE4F4;
+			settings = {
+				ATTRIBUTES = ("RemoveHeadersOnCopy");
+			};
+		};
+		D6D6FFB833A873AC55BCAA00 = {
+			isa = "PBXCopyFilesBuildPhase";
+			buildActionMask = 2147483647;
+			dstPath = "$(CONTENTS_FOLDER_PATH)/Watch";
+			dstSubfolderSpec = 16;
+			files = (9D9908E596EAD15426050E41);
+			name = "Embed YKFWatch";
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		7D79237E3CBAB1E0C3AFBB34 = {
+			isa = "XCBuildConfiguration";
+			buildSettings = {
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				PRODUCT_BUNDLE_IDENTIFIER = "dev.jacksonwilson.ykfarrivals";
+				INFOPLIST_FILE = "YKFArrivals/Info.plist";
+				GENERATE_INFOPLIST_FILE = "NO";
+				SDKROOT = "iphoneos";
+				SWIFT_VERSION = "5.0";
+				CODE_SIGN_STYLE = "Automatic";
+				TARGETED_DEVICE_FAMILY = "1";
+				MARKETING_VERSION = "1.0";
+				CURRENT_PROJECT_VERSION = "1";
+				SWIFT_EMIT_LOC_STRINGS = "YES";
+				ENABLE_USER_SCRIPT_SANDBOXING = "YES";
+				ASSETCATALOG_COMPILER_APPICON_NAME = "AppIcon";
+				IPHONEOS_DEPLOYMENT_TARGET = "17.0";
+				CODE_SIGN_ENTITLEMENTS = "YKFArrivals/YKFArrivals.entitlements";
+				DEBUG_INFORMATION_FORMAT = "dwarf";
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "DEBUG";
+			};
+			name = "Debug";
+		};
+		0676C768D5AA2C1DB7F0070C = {
+			isa = "XCBuildConfiguration";
+			buildSettings = {
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				PRODUCT_BUNDLE_IDENTIFIER = "dev.jacksonwilson.ykfarrivals";
+				INFOPLIST_FILE = "YKFArrivals/Info.plist";
+				GENERATE_INFOPLIST_FILE = "NO";
+				SDKROOT = "iphoneos";
+				SWIFT_VERSION = "5.0";
+				CODE_SIGN_STYLE = "Automatic";
+				TARGETED_DEVICE_FAMILY = "1";
+				MARKETING_VERSION = "1.0";
+				CURRENT_PROJECT_VERSION = "1";
+				SWIFT_EMIT_LOC_STRINGS = "YES";
+				ENABLE_USER_SCRIPT_SANDBOXING = "YES";
+				ASSETCATALOG_COMPILER_APPICON_NAME = "AppIcon";
+				IPHONEOS_DEPLOYMENT_TARGET = "17.0";
+				CODE_SIGN_ENTITLEMENTS = "YKFArrivals/YKFArrivals.entitlements";
+				SWIFT_COMPILATION_MODE = "wholemodule";
+			};
+			name = "Release";
+		};
+		43060E0AFC1AB809DA562F7D = {
+			isa = "XCConfigurationList";
+			buildConfigurations = (7D79237E3CBAB1E0C3AFBB34, 0676C768D5AA2C1DB7F0070C);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = "Release";
+		};
+		B3B3021104225DD8BBABD243 = {
+			isa = "PBXNativeTarget";
+			buildConfigurationList = 43060E0AFC1AB809DA562F7D;
+			buildPhases = (08182DA1BB7020C0EA03BDCC, 266847871E29F25182C54C70, AFF01289B7394EAB655BC9F1, 63CC36BD8FC58BEE9E0DEE6F, D6D6FFB833A873AC55BCAA00);
+			buildRules = ();
+			dependencies = (40A9C412913BDB0E9B743BD7, 32A1EBC9E77550907591A4CF);
+			name = "YKFArrivals";
+			productName = "YKFArrivals";
+			productReference = F6015AA8C5AF70A4B8E4D3BF;
+			productType = "com.apple.product-type.application";
+		};
+		DF3988557AA62A8666F1F604 = {
+			isa = "PBXFileReference";
+			explicitFileType = "wrapper.app-extension";
+			path = "YKFWidgets.appex";
+			sourceTree = "BUILT_PRODUCTS_DIR";
+		};
+		6EA002D489C1D2E8958783D3 = {
+			isa = "PBXBuildFile";
+			fileRef = 644032F41F2325C223F95B82;
+		};
+		725E7F2A2991AD5DB2DD6EA5 = {
+			isa = "PBXBuildFile";
+			fileRef = 685CDE935D32B25686CEBF15;
+		};
+		96A1B2CEAF06F2B0E7FCEF30 = {
+			isa = "PBXBuildFile";
+			fileRef = F02006E200E97E7D7BE8950D;
+		};
+		CD412C9911082BDE85F07A1F = {
+			isa = "PBXFileReference";
+			lastKnownFileType = "sourcecode.swift";
+			path = "Widgets/YKFWidgets.swift";
+			sourceTree = "SOURCE_ROOT";
+		};
+		654E2F6A0A8308292FAF6CA2 = {
+			isa = "PBXBuildFile";
+			fileRef = CD412C9911082BDE85F07A1F;
+		};
+		73CC3EC6805419F78EC85CE5 = {
+			isa = "PBXSourcesBuildPhase";
+			buildActionMask = 2147483647;
+			files = (6EA002D489C1D2E8958783D3, 725E7F2A2991AD5DB2DD6EA5, 96A1B2CEAF06F2B0E7FCEF30, 654E2F6A0A8308292FAF6CA2);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		22BDB401F4C7403DED796857 = {
+			isa = "PBXFrameworksBuildPhase";
+			buildActionMask = 2147483647;
+			files = ();
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		F6FC959A9DE7C7DA8F96E51C = {
+			isa = "PBXResourcesBuildPhase";
+			buildActionMask = 2147483647;
+			files = ();
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		AA4353F178953DDFDAE721B1 = {
+			isa = "XCBuildConfiguration";
+			buildSettings = {
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				PRODUCT_BUNDLE_IDENTIFIER = "dev.jacksonwilson.ykfarrivals.widgets";
+				INFOPLIST_FILE = "Widgets/Info.plist";
+				GENERATE_INFOPLIST_FILE = "NO";
+				SDKROOT = "iphoneos";
+				SWIFT_VERSION = "5.0";
+				CODE_SIGN_STYLE = "Automatic";
+				TARGETED_DEVICE_FAMILY = "1";
+				MARKETING_VERSION = "1.0";
+				CURRENT_PROJECT_VERSION = "1";
+				SWIFT_EMIT_LOC_STRINGS = "YES";
+				ENABLE_USER_SCRIPT_SANDBOXING = "YES";
+				IPHONEOS_DEPLOYMENT_TARGET = "17.0";
+				CODE_SIGN_ENTITLEMENTS = "Widgets/YKFWidgets.entitlements";
+				SKIP_INSTALL = "YES";
+				APPLICATION_EXTENSION_API_ONLY = "YES";
+				DEBUG_INFORMATION_FORMAT = "dwarf";
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "DEBUG";
+			};
+			name = "Debug";
+		};
+		127921986EB3F26A19FA11B2 = {
+			isa = "XCBuildConfiguration";
+			buildSettings = {
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				PRODUCT_BUNDLE_IDENTIFIER = "dev.jacksonwilson.ykfarrivals.widgets";
+				INFOPLIST_FILE = "Widgets/Info.plist";
+				GENERATE_INFOPLIST_FILE = "NO";
+				SDKROOT = "iphoneos";
+				SWIFT_VERSION = "5.0";
+				CODE_SIGN_STYLE = "Automatic";
+				TARGETED_DEVICE_FAMILY = "1";
+				MARKETING_VERSION = "1.0";
+				CURRENT_PROJECT_VERSION = "1";
+				SWIFT_EMIT_LOC_STRINGS = "YES";
+				ENABLE_USER_SCRIPT_SANDBOXING = "YES";
+				IPHONEOS_DEPLOYMENT_TARGET = "17.0";
+				CODE_SIGN_ENTITLEMENTS = "Widgets/YKFWidgets.entitlements";
+				SKIP_INSTALL = "YES";
+				APPLICATION_EXTENSION_API_ONLY = "YES";
+				SWIFT_COMPILATION_MODE = "wholemodule";
+			};
+			name = "Release";
+		};
+		5A290E044BA8B57009643486 = {
+			isa = "XCConfigurationList";
+			buildConfigurations = (AA4353F178953DDFDAE721B1, 127921986EB3F26A19FA11B2);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = "Release";
+		};
+		E8F217167D267D8A3BE2D64D = {
+			isa = "PBXNativeTarget";
+			buildConfigurationList = 5A290E044BA8B57009643486;
+			buildPhases = (73CC3EC6805419F78EC85CE5, 22BDB401F4C7403DED796857, F6FC959A9DE7C7DA8F96E51C);
+			buildRules = ();
+			dependencies = ();
+			name = "YKFWidgets";
+			productName = "YKFWidgets";
+			productReference = DF3988557AA62A8666F1F604;
+			productType = "com.apple.product-type.app-extension";
+		};
+		87088323961C745C783DE4F4 = {
+			isa = "PBXFileReference";
+			explicitFileType = "wrapper.application";
+			path = "YKFWatch.app";
+			sourceTree = "BUILT_PRODUCTS_DIR";
+		};
+		B2F070D338A504919C6E56B0 = {
+			isa = "PBXBuildFile";
+			fileRef = 644032F41F2325C223F95B82;
+		};
+		0CAA072C9E6F7BF3670BCD06 = {
+			isa = "PBXBuildFile";
+			fileRef = 685CDE935D32B25686CEBF15;
+		};
+		68C47C93941EF7D38BA7A7A1 = {
+			isa = "PBXFileReference";
+			lastKnownFileType = "sourcecode.swift";
+			path = "Watch/YKFWatchApp.swift";
+			sourceTree = "SOURCE_ROOT";
+		};
+		8612C65369753EBEEB397746 = {
+			isa = "PBXBuildFile";
+			fileRef = 68C47C93941EF7D38BA7A7A1;
+		};
+		2F879C5941AC2B21BF85DFB1 = {
+			isa = "PBXSourcesBuildPhase";
+			buildActionMask = 2147483647;
+			files = (B2F070D338A504919C6E56B0, 0CAA072C9E6F7BF3670BCD06, 8612C65369753EBEEB397746);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		04ED8FCC80C0B93A83FAB574 = {
+			isa = "PBXFrameworksBuildPhase";
+			buildActionMask = 2147483647;
+			files = ();
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		E86A70465732DE9D65CDF24E = {
+			isa = "PBXResourcesBuildPhase";
+			buildActionMask = 2147483647;
+			files = ();
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		51F01F665387108EAE4FDECB = {
+			isa = "PBXContainerItemProxy";
+			containerPortal = 98F54143AB4E86B28C3AFEE0;
+			proxyType = 1;
+			remoteGlobalIDString = DC3FBF1AD6544A386F8A1AF7;
+			remoteInfo = "YKFWatchWidgets";
+		};
+		2F409B3A79E7B5E5008F2269 = {
+			isa = "PBXTargetDependency";
+			target = DC3FBF1AD6544A386F8A1AF7;
+			targetProxy = 51F01F665387108EAE4FDECB;
+		};
+		711680B4664E65DCAF4ACD6D = {
+			isa = "PBXBuildFile";
+			fileRef = 5ABA8280953486BB996E1487;
+			settings = {
+				ATTRIBUTES = ("RemoveHeadersOnCopy");
+			};
+		};
+		8F623B0F11AC261137976E56 = {
+			isa = "PBXCopyFilesBuildPhase";
+			buildActionMask = 2147483647;
+			dstPath = "";
+			dstSubfolderSpec = 13;
+			files = (711680B4664E65DCAF4ACD6D);
+			name = "Embed YKFWatchWidgets";
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		EF3879E507A451BAC5E0DCBE = {
+			isa = "XCBuildConfiguration";
+			buildSettings = {
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				PRODUCT_BUNDLE_IDENTIFIER = "dev.jacksonwilson.ykfarrivals.watch";
+				INFOPLIST_FILE = "Watch/Info.plist";
+				GENERATE_INFOPLIST_FILE = "NO";
+				SDKROOT = "watchos";
+				SWIFT_VERSION = "5.0";
+				CODE_SIGN_STYLE = "Automatic";
+				TARGETED_DEVICE_FAMILY = "4";
+				MARKETING_VERSION = "1.0";
+				CURRENT_PROJECT_VERSION = "1";
+				SWIFT_EMIT_LOC_STRINGS = "YES";
+				ENABLE_USER_SCRIPT_SANDBOXING = "YES";
+				WATCHOS_DEPLOYMENT_TARGET = "10.0";
+				SKIP_INSTALL = "YES";
+				CODE_SIGN_ENTITLEMENTS = "Watch/YKFWatch.entitlements";
+				DEBUG_INFORMATION_FORMAT = "dwarf";
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "DEBUG";
+			};
+			name = "Debug";
+		};
+		27942482E4FCA9165150BAD6 = {
+			isa = "XCBuildConfiguration";
+			buildSettings = {
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				PRODUCT_BUNDLE_IDENTIFIER = "dev.jacksonwilson.ykfarrivals.watch";
+				INFOPLIST_FILE = "Watch/Info.plist";
+				GENERATE_INFOPLIST_FILE = "NO";
+				SDKROOT = "watchos";
+				SWIFT_VERSION = "5.0";
+				CODE_SIGN_STYLE = "Automatic";
+				TARGETED_DEVICE_FAMILY = "4";
+				MARKETING_VERSION = "1.0";
+				CURRENT_PROJECT_VERSION = "1";
+				SWIFT_EMIT_LOC_STRINGS = "YES";
+				ENABLE_USER_SCRIPT_SANDBOXING = "YES";
+				WATCHOS_DEPLOYMENT_TARGET = "10.0";
+				SKIP_INSTALL = "YES";
+				CODE_SIGN_ENTITLEMENTS = "Watch/YKFWatch.entitlements";
+				SWIFT_COMPILATION_MODE = "wholemodule";
+			};
+			name = "Release";
+		};
+		D359662A19DDB707529B7DD6 = {
+			isa = "XCConfigurationList";
+			buildConfigurations = (EF3879E507A451BAC5E0DCBE, 27942482E4FCA9165150BAD6);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = "Release";
+		};
+		6DF0B395652CEF2E1F336C70 = {
+			isa = "PBXNativeTarget";
+			buildConfigurationList = D359662A19DDB707529B7DD6;
+			buildPhases = (2F879C5941AC2B21BF85DFB1, 04ED8FCC80C0B93A83FAB574, E86A70465732DE9D65CDF24E, 8F623B0F11AC261137976E56);
+			buildRules = ();
+			dependencies = (2F409B3A79E7B5E5008F2269);
+			name = "YKFWatch";
+			productName = "YKFWatch";
+			productReference = 87088323961C745C783DE4F4;
+			productType = "com.apple.product-type.application";
+		};
+		5ABA8280953486BB996E1487 = {
+			isa = "PBXFileReference";
+			explicitFileType = "wrapper.app-extension";
+			path = "YKFWatchWidgets.appex";
+			sourceTree = "BUILT_PRODUCTS_DIR";
+		};
+		8EC1C4D1EA005CF07A969C3E = {
+			isa = "PBXBuildFile";
+			fileRef = 644032F41F2325C223F95B82;
+		};
+		30E9116842913A3C5D41CFF5 = {
+			isa = "PBXBuildFile";
+			fileRef = 685CDE935D32B25686CEBF15;
+		};
+		56588896F048CAFA2A424EEB = {
+			isa = "PBXFileReference";
+			lastKnownFileType = "sourcecode.swift";
+			path = "Watch/WatchWidget.swift";
+			sourceTree = "SOURCE_ROOT";
+		};
+		C37AFC77B5F899399AEDEF9B = {
+			isa = "PBXBuildFile";
+			fileRef = 56588896F048CAFA2A424EEB;
+		};
+		E463FAD0F6B067EE16951006 = {
+			isa = "PBXSourcesBuildPhase";
+			buildActionMask = 2147483647;
+			files = (8EC1C4D1EA005CF07A969C3E, 30E9116842913A3C5D41CFF5, C37AFC77B5F899399AEDEF9B);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		926B04E142FFBB2F9E0902C9 = {
+			isa = "PBXFrameworksBuildPhase";
+			buildActionMask = 2147483647;
+			files = ();
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		B5E3E9A5E8413DF827410737 = {
+			isa = "PBXResourcesBuildPhase";
+			buildActionMask = 2147483647;
+			files = ();
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		5077261AF141F2BBE18E45CC = {
+			isa = "XCBuildConfiguration";
+			buildSettings = {
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				PRODUCT_BUNDLE_IDENTIFIER = "dev.jacksonwilson.ykfarrivals.watch.widgets";
+				INFOPLIST_FILE = "Watch/WidgetInfo.plist";
+				GENERATE_INFOPLIST_FILE = "NO";
+				SDKROOT = "watchos";
+				SWIFT_VERSION = "5.0";
+				CODE_SIGN_STYLE = "Automatic";
+				TARGETED_DEVICE_FAMILY = "4";
+				MARKETING_VERSION = "1.0";
+				CURRENT_PROJECT_VERSION = "1";
+				SWIFT_EMIT_LOC_STRINGS = "YES";
+				ENABLE_USER_SCRIPT_SANDBOXING = "YES";
+				WATCHOS_DEPLOYMENT_TARGET = "10.0";
+				SKIP_INSTALL = "YES";
+				CODE_SIGN_ENTITLEMENTS = "Watch/YKFWatchWidgets.entitlements";
+				APPLICATION_EXTENSION_API_ONLY = "YES";
+				DEBUG_INFORMATION_FORMAT = "dwarf";
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "DEBUG";
+			};
+			name = "Debug";
+		};
+		A4F2C295DB9310BC34D74B4F = {
+			isa = "XCBuildConfiguration";
+			buildSettings = {
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				PRODUCT_BUNDLE_IDENTIFIER = "dev.jacksonwilson.ykfarrivals.watch.widgets";
+				INFOPLIST_FILE = "Watch/WidgetInfo.plist";
+				GENERATE_INFOPLIST_FILE = "NO";
+				SDKROOT = "watchos";
+				SWIFT_VERSION = "5.0";
+				CODE_SIGN_STYLE = "Automatic";
+				TARGETED_DEVICE_FAMILY = "4";
+				MARKETING_VERSION = "1.0";
+				CURRENT_PROJECT_VERSION = "1";
+				SWIFT_EMIT_LOC_STRINGS = "YES";
+				ENABLE_USER_SCRIPT_SANDBOXING = "YES";
+				WATCHOS_DEPLOYMENT_TARGET = "10.0";
+				SKIP_INSTALL = "YES";
+				CODE_SIGN_ENTITLEMENTS = "Watch/YKFWatchWidgets.entitlements";
+				APPLICATION_EXTENSION_API_ONLY = "YES";
+				SWIFT_COMPILATION_MODE = "wholemodule";
+			};
+			name = "Release";
+		};
+		5B35A426D6F4E2304870773E = {
+			isa = "XCConfigurationList";
+			buildConfigurations = (5077261AF141F2BBE18E45CC, A4F2C295DB9310BC34D74B4F);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = "Release";
+		};
+		DC3FBF1AD6544A386F8A1AF7 = {
+			isa = "PBXNativeTarget";
+			buildConfigurationList = 5B35A426D6F4E2304870773E;
+			buildPhases = (E463FAD0F6B067EE16951006, 926B04E142FFBB2F9E0902C9, B5E3E9A5E8413DF827410737);
+			buildRules = ();
+			dependencies = ();
+			name = "YKFWatchWidgets";
+			productName = "YKFWatchWidgets";
+			productReference = 5ABA8280953486BB996E1487;
+			productType = "com.apple.product-type.app-extension";
+		};
+		FBDC4F23F93125BBEEAE800C = {
+			isa = "PBXGroup";
+			children = (F6015AA8C5AF70A4B8E4D3BF, DF3988557AA62A8666F1F604, 87088323961C745C783DE4F4, 5ABA8280953486BB996E1487);
+			name = "Products";
+			sourceTree = "<group>";
+		};
+		B28B7AF69320201D1CF206EB = {
+			isa = "PBXGroup";
+			children = (644032F41F2325C223F95B82, 685CDE935D32B25686CEBF15, 3C9A2D0CD7047EF6B167AAC5, F02006E200E97E7D7BE8950D, 9E68A1FE8F073C1D3E9F35D8, 0767C7E17CCA24668BE1F1DE, BBAB1B66A6825204A91A2ABD, 657332BFA0FF75E3992B0CCC, 57382EB5255E905767B952F5, 7D77DB4B1AEA3CE92B2EC32B, F871463D201E6DB09519D862, 9C60020D65114330524951C5, CD412C9911082BDE85F07A1F, 68C47C93941EF7D38BA7A7A1, 56588896F048CAFA2A424EEB, FBDC4F23F93125BBEEAE800C);
+			sourceTree = "<group>";
+		};
+		877A6BA951A2EA0025A2ABE8 = {
+			isa = "XCBuildConfiguration";
+			buildSettings = {
+				CLANG_ENABLE_MODULES = "YES";
+				SWIFT_VERSION = "5.0";
+				DEBUG_INFORMATION_FORMAT = "dwarf";
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "DEBUG";
+			};
+			name = "Debug";
+		};
+		959134B361DD7E21ADEA3164 = {
+			isa = "XCBuildConfiguration";
+			buildSettings = {
+				CLANG_ENABLE_MODULES = "YES";
+				SWIFT_VERSION = "5.0";
+				SWIFT_COMPILATION_MODE = "wholemodule";
+			};
+			name = "Release";
+		};
+		247BF104A9AD002C539DA531 = {
+			isa = "XCConfigurationList";
+			buildConfigurations = (877A6BA951A2EA0025A2ABE8, 959134B361DD7E21ADEA3164);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = "Release";
+		};
+		98F54143AB4E86B28C3AFEE0 = {
+			isa = "PBXProject";
+			attributes = {
+				LastUpgradeCheck = "1600";
+				BuildIndependentTargetsInParallel = "YES";
+			};
+			buildConfigurationList = 247BF104A9AD002C539DA531;
+			compatibilityVersion = "Xcode 14.0";
+			developmentRegion = "en";
+			hasScannedForEncodings = 0;
+			knownRegions = ("en", "Base");
+			mainGroup = B28B7AF69320201D1CF206EB;
+			productRefGroup = FBDC4F23F93125BBEEAE800C;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (B3B3021104225DD8BBABD243, E8F217167D267D8A3BE2D64D, 6DF0B395652CEF2E1F336C70, DC3FBF1AD6544A386F8A1AF7);
+		};
+	};
+	rootObject = 98F54143AB4E86B28C3AFEE0;
+}

@@ -1,0 +1,32 @@
+name: Native Apple verification
+on:
+  push:
+    paths: ['apple/**', 'native_service/**', 'tests/test_native_delivery.py', '.github/workflows/native-apple.yml']
+  pull_request:
+    paths: ['apple/**', 'native_service/**', 'tests/test_native_delivery.py', '.github/workflows/native-apple.yml']
+permissions:
+  contents: read
+jobs:
+  apple:
+    runs-on: macos-15
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - name: Test native core
+        run: swift test --package-path apple
+      - name: Check reproducible project
+        run: python3 apple/generate_project.py && git diff --exit-code -- apple/YKFArrivals.xcodeproj apple/YKFBasic.xcodeproj
+      - name: Build basic iPhone app
+        run: xcodebuild -project apple/YKFBasic.xcodeproj -scheme YKFArrivals -configuration Debug -destination 'generic/platform=iOS Simulator' CODE_SIGNING_ALLOWED=NO build
+      - name: Build iPhone, widgets and companion Watch app
+        run: xcodebuild -project apple/YKFArrivals.xcodeproj -scheme YKFArrivals -configuration Debug -destination 'generic/platform=iOS Simulator' CODE_SIGNING_ALLOWED=NO build
+  delivery:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: pip install -r native_service/requirements.txt pytest
+      - run: python -m pytest -q tests/test_native_delivery.py native_service/test_api.py
